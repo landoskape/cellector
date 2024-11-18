@@ -1,4 +1,3 @@
-# Standard modules
 from copy import copy
 import functools
 import numpy as np
@@ -7,6 +6,7 @@ import matplotlib.pyplot as plt
 
 # GUI-related modules
 import napari
+from napari.utils.colormaps import label_colormap, direct_colormap
 import pyqtgraph as pg
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QGraphicsProxyWidget, QPushButton
@@ -49,13 +49,28 @@ QWidget {
 
 
 class RedSelectionGUI:
-    def __init__(self, rcp, num_bins=50, init_yzoom=None):
+    """A GUI for selecting red cells from a suite2p session.
+
+    This GUI allows the user to interactively select red cells from a suite2p session.
+    The user can select red cells based on the intensity features of the cells. The GUI
+    shows histograms of the intensity features of the red cells and allows the user to
+    select the range of feature values that qualify as red cells. The GUI also allows
+    the user to manually label cells as red or control cells.
+
+    Parameters
+    ----------
+    rcp : RedCellProcessor
+        An instance of the RedCellProcessor class that contains the suite2p session data.
+    num_bins : int, optional
+        The number of bins to use for the histograms of the intensity features. Default is 50.
+    """
+
+    def __init__(self, rcp, num_bins=50):
         if not isinstance(rcp, RedCellProcessor):
             raise ValueError("redCellObj must be an instance of the redCellProcessing class inherited from session")
 
         self.rcp = rcp
         self.num_bins = num_bins
-        self.init_yzoom = init_yzoom
         self.plane_idx = 0  # determines which plane is currently being shown in the napari viewer
 
         self.num_features = len(self.rcp.features)
@@ -65,7 +80,7 @@ class RedSelectionGUI:
         self.red_idx = np.full(self.rcp.num_rois, True)
         self.manual_label = np.full(self.rcp.num_rois, False)
         self.manual_label_active = np.full(self.rcp.num_rois, False)
-        self.prepare_feature_histograms()
+        self._prepare_feature_histograms()
 
         # open napari viewer and associated GUI features
         self.show_control_cells = False  # show control cells instead of red cells
@@ -77,9 +92,17 @@ class RedSelectionGUI:
         self.color_state_names = ["random", *self.rcp.features.keys()]
         self.idx_colormap = 0  # which colormap to use for pseudo coloring the masks
         self.colormaps = ["plasma", "autumn", "spring", "summer", "winter", "hot"]
-        self.initialize_napari_viewer()
+        self._initialize_napari_viewer()
 
-    def prepare_feature_histograms(self):
+    def _prepare_feature_histograms(self):
+        """Prepare the histograms for the intensity features of the red cells.
+
+        This function computes the histograms of the intensity features of the red cells
+        and stores the histograms in a format that can be used to update the histograms
+        in the GUI. The histograms are computed for each plane separately, and the maximum
+        value for the y-range of the histograms is set independently for each feature which
+        constrains the users scrolling to a useful range.
+        """
         self.h_values = {key: [None] * self.rcp.num_planes for key in self.rcp.features}
         self.h_values_red = {key: [None] * self.rcp.num_planes for key in self.rcp.features}
         self.h_bin_edges = {key: [None] for key in self.rcp.features}
@@ -102,7 +125,18 @@ class RedSelectionGUI:
         # set the maximum value for the y-range of the histograms independently for each feature
         self.h_values_maximum = {key: max(np.concatenate(value)) for key, value in self.h_values.items()}
 
-    def initialize_napari_viewer(self):
+    def _initialize_napari_viewer(self):
+        """Initialize the napari viewer and associated GUI features.
+
+        This function initializes the napari viewer and adds the reference image, masks,
+        and labels to the viewer. It also creates the GUI features for the histograms of
+        the intensity features of the red cells and adds them to the viewer. The GUI features
+        include toggle buttons for selecting the range of feature values that qualify as red
+        cells, buttons for saving the red cell selection and toggling between control and red
+        cells, and buttons for toggling the visibility of the masks and labels.
+
+        There are additional key stroke controls for efficient control of the GUI.
+        """
         self.viewer = napari.Viewer(title=f"Red Cell Curation")
         self.reference = self.viewer.add_image(np.stack(self.rcp.references), name="reference", blending="additive", opacity=0.6)
         self.masks = self.viewer.add_image(
@@ -145,6 +179,7 @@ class RedSelectionGUI:
         self.preserve_methods = {}
 
         def preserve_y_range(feature):
+            """Support for preserving the y limits of the feature histograms in a useful range."""
             # remove callback so we can update the yrange without a recursive call
             self.hist_plots[feature].getViewBox().sigYRangeChanged.disconnect(self.preserve_methods[feature])
             # then figure out the current y range (this is after a user update)
@@ -170,6 +205,7 @@ class RedSelectionGUI:
 
         # create cutoffLines (vertical infinite lines) for determining the range within feature values that qualify as red
         def update_cutoff_finished(_, feature):
+            """Callback for updating the feature cutoffs when the user finishes moving the cutoff lines."""
             cutoff_values = [
                 self.cutoff_lines[feature][0].pos()[0],
                 self.cutoff_lines[feature][1].pos()[0],
@@ -179,7 +215,7 @@ class RedSelectionGUI:
             self.feature_cutoffs[feature][1] = max_cutoff
             self.cutoff_lines[feature][0].setValue(min_cutoff)
             self.cutoff_lines[feature][1].setValue(max_cutoff)
-            self.update_red_selection()
+            self.update_by_feature_criterion()
 
         self.feature_range = {}
         self.feature_cutoffs = {}
@@ -199,7 +235,7 @@ class RedSelectionGUI:
                 self.hist_plots[feature].addItem(self.cutoff_lines[feature][i])
 
         # Reset red selection
-        self.update_red_selection()
+        self.update_by_feature_criterion()
 
         # ---------------------
         # -- now add toggles --
@@ -223,7 +259,7 @@ class RedSelectionGUI:
                 self.use_feature_buttons[feature][iminmax].setStyleSheet(q_checked_style)
 
             # update red selection, which will replot everything
-            self.update_red_selection()
+            self.update_by_feature_criterion()
 
         self.use_feature_buttons = {key: [None, None] for key in self.rcp.features}
         self.use_feature_proxies = [None] * (self.num_features * 2)
@@ -446,38 +482,37 @@ class RedSelectionGUI:
         self.viewer.dims.events.connect(update_plane_idx)
 
     def update_visibility(self):
+        """Update the visibility of the masks and labels in the napari viewer."""
         self.masks.visible = self.show_mask_image and self.mask_visibility
         self.labels.visible = not self.show_mask_image and self.mask_visibility
 
     def update_feature_plots(self):
+        """Update the histograms of the intensity features of the red cells in the napari viewer."""
         for feature in self.rcp.features:
             self.hist_graphs[feature].setOpts(height=self.h_values[feature][self.plane_idx])
             self.hist_reds[feature].setOpts(height=self.h_values_red[feature][self.plane_idx])
 
     def update_label_colors(self):
+        """Update the colors of the labels in the napari viewer."""
         color_state_name = self.color_state_names[self.color_state]
         if color_state_name == "random":
-            colormap = dict(
-                zip(
-                    [0, None],
-                    [
-                        np.array([0.0, 0.0, 0.0, 0.0], dtype=np.single),
-                        np.array([0.0, 0.0, 0.0, 1.0], dtype=np.single),
-                    ],
-                )
-            )
+            # this is inherited from the default random colormap in napari
+            colormap = label_colormap(49, 0.5, background_value=0)
         else:
+            # assign colors based on the feature values for every ROI
             norm = mpl.colors.Normalize(
                 vmin=self.feature_range[color_state_name][0],
                 vmax=self.feature_range[color_state_name][1],
             )
             colors = plt.colormaps[self.colormaps[self.idx_colormap]](norm(self.rcp.features[color_state_name]))
-            colormap = dict(zip(1 + np.arange(self.rcp.num_rois), colors))
-            colormap[0] = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.single)  # add transparent background
+            color_dict = dict(zip(1 + np.arange(self.rcp.num_rois), colors))
+            color_dict[None] = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.single)  # transparent background (or default)
+            colormap = direct_colormap(color_dict)
         # Update colors of the labels
-        self.labels.color = colormap
+        self.labels.colormap = colormap
 
-    def update_red_selection(self):
+    def update_by_feature_criterion(self):
+        """Update the idx of cells meeting the criterion defined by the features."""
         self.red_idx = np.full(self.rcp.num_rois, True)  # start with all as red
         for feature, value in self.rcp.features.items():
             if self.feature_active[feature][0]:
@@ -490,6 +525,11 @@ class RedSelectionGUI:
         self.regenerate_mask_data()
 
     def regenerate_mask_data(self):
+        """Regenerate the mask image and labels in the napari viewer based on the current selection.
+
+        Used whenever the selection of red cells is updated or the manual labels are updated such that
+        the GUI reflects the current selection appropriately.
+        """
         self.masks.data = self.mask_image
         self.labels.data = self.mask_labels
         features_by_plane = {key: utils.split_planes(value, self.rcp.rois_per_plane) for key, value in self.rcp.features.items()}
@@ -538,10 +578,12 @@ class RedSelectionGUI:
             by idx_selected_masks and sums over their intensity footprints to create a
             single image for each plane.
         """
-        mask_volume_by_plane = utils.split_planes(self.rcp.mask_volume, self.rcp.rois_per_plane)
-        idx_plot_by_plane = utils.split_planes(self.idx_selected_masks, self.rcp.rois_per_plane)
-        mask_image_by_plane = np.stack([np.sum(masks[idxs], axis=0) for masks, idxs in zip(mask_volume_by_plane, idx_plot_by_plane)])
-        return mask_image_by_plane
+        idx_selected = self.idx_selected_masks
+        image_data = np.zeros((self.rcp.num_planes, self.rcp.ly, self.rcp.lx), dtype=float)
+        for iroi, (plane, lam, ypix, xpix) in enumerate(zip(self.rcp.plane_idx, self.rcp.lam, self.rcp.ypix, self.rcp.xpix)):
+            if idx_selected[iroi]:
+                image_data[plane, ypix, xpix] += lam
+        return image_data
 
     @property
     def mask_labels(self):
@@ -559,9 +601,10 @@ class RedSelectionGUI:
             index to the ROI - and if ROIs are overlapping then the last ROI will be
             used. Only ROIs that are selected by the user are included in the labels.
         """
+        idx_selected = self.idx_selected_masks
         label_data = np.zeros((self.rcp.num_planes, self.rcp.ly, self.rcp.lx), dtype=int)
         for iroi, (plane, ypix, xpix) in enumerate(zip(self.rcp.plane_idx, self.rcp.ypix, self.rcp.xpix)):
-            if self.idx_selected_masks[iroi]:
+            if idx_selected[iroi]:
                 label_data[plane, ypix, xpix] = iroi + 1
         return label_data
 

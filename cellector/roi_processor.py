@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 from copy import deepcopy
 import numpy as np
 from . import utils
@@ -47,39 +47,49 @@ PARAM_FEATURE_MAPPING = dict(
     order=["dot_product", "corr_coef"],
 )
 
+FEATURE_METHODS = dict(
+    phase_corr="compute_phase_correlation",
+    dot_product="compute_dot_product",
+    corr_coef="compute_corr_coef",
+    in_vs_out="compute_in_vs_out",
+)
 
-class RedCellProcessor:
+
+class FeaturePipeline:
     """
-    Process and analyze red cell data across multiple image planes.
+    Pipeline for processing and analyzing mask & fluorescence data across multiple image planes.
 
-    This class handles the processing of red cell data by managing masks and reference
-    images across multiple planes, providing functionality for feature calculation
-    and analysis.
-
-    Attributes
-    ----------
-    feature_names : List[str]
-        Standard features computed for each cell.
-    feature_values : List[np.ndarray]
-        Values of the standard features for each cell.
-    num_planes : int
-        Number of planes in the dataset.
-    lx : int
-        X dimension of the masks/images.
-    ly : int
-        Y dimension of the masks/images.
-    num_rois : List[int]
-        Number of ROIs in each plane.
-    masks : List[np.ndarray]
-        List of masks for each plane, shape (numROIs, lx, ly) per plane.
-    reference : List[np.ndarray]
-        List of reference images, shape (lx, ly) per plane.
-    um_per_pixel : float
-        Conversion factor from pixels to micrometers.
+    This class handles the processing of mask & fluorescence data by managing masks
+    and reference images across multiple planes, providing functionality for feature
+    calculation and analysis.
     """
 
-    def __init__(self, stats: List[np.ndarray], references: List[np.ndarray], red_s2p: Optional[List[np.ndarray]] = None, **kwargs: dict):
-        """Initialize the RedCellProcessor with ROI stats and reference images.
+    def __init__(self, name, method, dependencies):
+        self.name = name
+        self.method = method
+        self.dependencies = dependencies
+
+
+class RoiProcessor:
+    """
+    Process and analyze mask & fluorescence data across multiple image planes.
+
+    This class handles the processing of mask & fluorescence data by managing masks
+    and reference images across multiple planes, providing functionality for feature
+    calculation and analysis.
+
+    # TODO: Add attributes and methods to the class docstring.
+    """
+
+    def __init__(
+        self,
+        stats: List[np.ndarray],
+        references: List[np.ndarray],
+        extra_features: Optional[Dict[str, List[np.ndarray]]] = None,
+        autocompute: bool = True,
+        **kwargs: dict,
+    ):
+        """Initialize the RoiProcessor with ROI stats and reference images.
 
         Parameters
         ----------
@@ -90,9 +100,14 @@ class RedCellProcessor:
         references : List[np.ndarray]
             List of reference images for each plane. Each element is a 2D
             numpy array with shape (lx, ly).
-        red_s2p : List[np.ndarray], optional
-            List of red cell probability from suite2p (or anywhere else) for each plane.
-            Each element is a 1d numpy array with length equal to the number of ROIs in that plane.
+        extra_features : Dict[str, np.ndarray], optional
+            Dictionary containing extra features to be added to each plane. Each key is the
+            name of the feature and the value is a list of 1d numpy arrays with length equal
+            to the number of ROIs in each plane. Default is None.
+        autocompute : bool, optional
+            If True, will automatically compute all standard features upon initialization. The only
+            reason not to have this set to True is if you want the object for some other purpose or
+            if you want to compute a subset of the features, which you can do manually. Default is True.
         **kwargs : dict
             Additional parameters to update the default parameters used for preprocessing.
         """
@@ -151,19 +166,34 @@ class RedCellProcessor:
         # Initialize preprocessing cache
         self._cache = {}
 
-        # If red_s2p is provided, validate and store
-        if red_s2p is not None:
-            if len(red_s2p) != self.num_planes:
-                raise ValueError(f"Number of red_s2p arrays ({len(red_s2p)}) must match number of planes ({self.num_planes})")
-            if not all(len(s2p) == nroi for s2p, nroi in zip(red_s2p, self.rois_per_plane)):
-                raise ValueError("Length of red_s2p arrays must match number of ROIs in each plane")
-            self.add_feature("red_s2p", utils.cat_planes(red_s2p))
+        # If extra features are provided, validate and store
+        if extra_features is not None:
+            if not isinstance(extra_features, dict):
+                raise TypeError("Extra features must be a dictionary")
+            for name, values in extra_features.items():
+                if not isinstance(name, str):
+                    raise TypeError("Extra feature values must be a numpy array")
+                if not isinstance(values, list) and not all(isinstance(v, np.ndarray) for v in values):
+                    raise TypeError("Extra feature values must be a list of numpy arrays")
+                if not all(v.ndim == 1 for v in values) or not all(len(v) == nroi for v, nroi in zip(values, self.rois_per_plane)):
+                    raise ValueError("Extra feature values must be 1D numpy arrays with length equal to the number of ROIs for each plane.")
+                self.add_feature(name, utils.cat_planes(values))
 
         # Establish preprocessing parameters
         self.parameters = deepcopy(DEFAULT_PARAMETERS)
         if set(kwargs) - set(DEFAULT_PARAMETERS):
             raise ValueError(f"Invalid parameter(s): {', '.join(set(kwargs) - set(DEFAULT_PARAMETERS))}")
         self.parameters.update(kwargs)
+
+        # Register feature methods
+        for feature_name in FEATURE_METHODS:
+            if isinstance(FEATURE_METHODS[feature_name], str) and hasattr(self, FEATURE_METHODS[feature_name]):
+                # If the feature name is a string
+                raise ValueError(f"Feature method {FEATURE_METHODS[feature_name]} not found in RoiProcessor")
+
+        # Measure features
+        if autocompute:
+            self.compute_features()
 
     def update_parameters(self, **kwargs: dict):
         """Update preprocessing parameters and clear affected cache entries.
@@ -214,22 +244,29 @@ class RedCellProcessor:
 
         Returns
         -------
-        RedCellProcessor
-            New instance of RedCellProcessor with updated parameters.
+        RoiProcessor
+            New instance of RoiProcessor with updated parameters.
         """
         self_copy = deepcopy(self)
         self_copy.update_parameters(**params)
         return self_copy
 
+    def compute_features(self):
+        """Compute all standard features for each ROI.
+
+        Features are computed and stored in the self.features dictionary of the RoiProcessor instance.
+        """
+        for feature_name in FEATURE_METHODS:
+            self._feature_method(feature_name)()
+
     def _feature_method(self, feature_name: str):
         """Return the method to compute the given feature name."""
-        feature_methods = dict(
-            phase_corr=self.compute_phase_correlation,
-            dot_product=self.compute_dot_product,
-        )
-        if feature_name not in feature_methods:
+        if feature_name not in FEATURE_METHODS:
             raise ValueError(f"Feature {feature_name} not found in feature registry")
-        return feature_methods[feature_name]
+        feature_method = FEATURE_METHODS[feature_name]
+        if not hasattr(self, feature_method):
+            raise ValueError(f"Feature method {feature_method} not found in RoiProcessor")
+        return getattr(self, FEATURE_METHODS[feature_name])
 
     def add_feature(self, name: str, values: np.ndarray):
         """Add (or update) the name and values to the self.features dictionary.
@@ -245,13 +282,8 @@ class RedCellProcessor:
             raise ValueError(f"Length of feature values ({len(values)}) for feature {name} must match number of ROIs ({self.num_rois})")
         self.features[name] = values
 
-    def compute_phase_correlation(self, return_values: bool = False):
+    def compute_phase_correlation(self):
         """Compute the phase correlation between the masks and reference images.
-
-        Parameters
-        ----------
-        return_values : bool, optional
-            If True, will return the computed feature values. Default is False.
 
         Returns
         -------
@@ -273,18 +305,10 @@ class RedCellProcessor:
         windowed_references = filter(centered_references, "window", kernel=self.parameters["window_kernel"])
 
         # Phase correlation requires windowing
-        phase_corr = features.phase_correlation_zero(windowed_masks, windowed_references, eps=self.parameters["phase_corr_eps"])
-        self.add_feature("phase_corr", phase_corr)
-        if return_values:
-            return phase_corr
+        return features.phase_correlation_zero(windowed_masks, windowed_references, eps=self.parameters["phase_corr_eps"])
 
-    def compute_dot_product(self, return_values: bool = False):
+    def compute_dot_product(self):
         """Compute the dot product between the masks and filtered reference images.
-
-        Parameters
-        ----------
-        return_values : bool, optional
-            If True, will return the computed feature values. Default is False.
 
         Returns
         -------
@@ -298,18 +322,10 @@ class RedCellProcessor:
         features.dot_product : Function that computes the dot product values.
         features.dot_product_array : Alternative that uses mask images instead of weights and pixel indices.
         """
-        dot_product = features.dot_product(self.lam, self.ypix, self.xpix, self.plane_idx, self.filtered_references)
-        self.add_feature("dot_product", dot_product)
-        if return_values:
-            return dot_product
+        return features.dot_product(self.lam, self.ypix, self.xpix, self.plane_idx, self.filtered_references)
 
-    def compute_corr_coef(self, return_values: bool = False):
+    def compute_corr_coef(self):
         """Compute the correlation coefficient between the masks and reference images.
-
-        Parameters
-        ----------
-        return_values : bool, optional
-            If True, will return the computed feature values. Default is False.
 
         Returns
         -------
@@ -327,21 +343,13 @@ class RedCellProcessor:
             self.filtered_centered_references,
             iterations=self.parameters["surround_iterations"],
         )
-        corr_coef = features.compute_correlation(masks_surround, references_surround)
-        self.add_feature("corr_coef", corr_coef)
-        if return_values:
-            return corr_coef
+        return features.compute_correlation(masks_surround, references_surround)
 
-    def compute_in_vs_out(self, return_values: bool = False):
+    def compute_in_vs_out(self):
         """Compute the in vs. out feature for each ROI.
 
         The in vs. out feature is the ratio of the dot product of the mask and reference
         image inside the mask to the dot product inside plus outside the mask.
-
-        Parameters
-        ----------
-        return_values : bool, optional
-            If True, will return the computed feature values. Default is False.
 
         Returns
         -------
@@ -350,14 +358,7 @@ class RedCellProcessor:
             feature values, and instead to store them in the self.features dictionary of
             the RedCellProcessor instance.
         """
-        in_vs_out = features.in_vs_out(
-            self.centered_masks,
-            self.centered_references,
-            iterations=self.parameters["surround_iterations"],
-        )
-        self.add_feature("in_vs_out", in_vs_out)
-        if return_values:
-            return in_vs_out
+        return features.in_vs_out(self.centered_masks, self.centered_references, iterations=self.parameters["surround_iterations"])
 
     @property
     def centroids(self):

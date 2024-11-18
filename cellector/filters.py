@@ -1,6 +1,6 @@
 from typing import Optional, Union
 import numpy as np
-from .utils import _broadcastable
+from .utils import broadcastable
 
 
 def window(image: np.ndarray, kernel: Optional[Union[str, callable]] = "hanning"):
@@ -42,7 +42,7 @@ def window(image: np.ndarray, kernel: Optional[Union[str, callable]] = "hanning"
     else:
         raise TypeError("window_func must be callable or numpy array")
 
-    if not _broadcastable(kernel_2d, image):
+    if not broadcastable(kernel_2d, image):
         raise ValueError("Window and image must be broadcastable")
 
     return kernel_2d * image
