@@ -1,4 +1,5 @@
 from typing import List, Optional, Dict
+from pathlib import Path
 from copy import deepcopy
 import numpy as np
 from . import utils
@@ -51,8 +52,10 @@ class RoiProcessor:
         self,
         stats: List[np.ndarray],
         references: List[np.ndarray],
+        save_folders: List[str],
         extra_features: Optional[Dict[str, List[np.ndarray]]] = None,
         autocompute: bool = True,
+        use_saved: bool = True,
         **kwargs: dict,
     ):
         """Initialize the RoiProcessor with ROI stats and reference images.
@@ -66,6 +69,9 @@ class RoiProcessor:
         references : List[np.ndarray]
             List of reference images for each plane. Each element is a 2D
             numpy array with shape (lx, ly).
+        save_folders : List[str]
+            List of folder paths corresponding to each plane. Used for saving and loading
+            data associated with the RoiProcessor instance.
         extra_features : Dict[str, np.ndarray], optional
             Dictionary containing extra features to be added to each plane. Each key is the
             name of the feature and the value is a list of 1d numpy arrays with length equal
@@ -74,22 +80,29 @@ class RoiProcessor:
             If True, will automatically compute all standard features upon initialization. The only
             reason not to have this set to True is if you want the object for some other purpose or
             if you want to compute a subset of the features, which you can do manually. Default is True.
+        use_saved : bool, optional
+            If True, will attempt to load saved features from disk if they exist. Default is True.
         **kwargs : dict
             Additional parameters to update the default parameters used for preprocessing.
         """
         # Validate inputs are lists
-        if not isinstance(stats, list) or not isinstance(references, list):
-            raise TypeError("Both masks and reference must be lists of numpy arrays")
+        if not isinstance(stats, list) or not isinstance(references, list) or not isinstance(save_folders, list):
+            raise TypeError("Stats, references, and save_folders must be lists.")
 
-        if not stats or not references:  # Check for empty lists
-            raise ValueError("Masks and reference lists cannot be empty")
+        if not stats or not references or not save_folders:
+            raise ValueError("Stats, references, and save_folder lists cannot be empty")
 
         # Validate number of planes match
-        if len(stats) != len(references):
-            raise ValueError(f"Number of mask arrays ({len(stats)}) must match number of reference images ({len(references)})")
+        if len(stats) != len(references) != len(save_folders):
+            raise ValueError(
+                f"Number of mask arrays ({len(stats)}) must match reference images ({len(references)}) and save folders ({len(save_folders)})"
+            )
 
-        if not all(ref.ndim == 2 for ref in references):
-            raise ValueError("All reference images must be 2D")
+        if not all(isinstance(ref, np.ndarray) for ref in references) or not all(ref.ndim == 2 for ref in references):
+            raise ValueError("All reference images must be 2D numpy arrays")
+
+        if not all(isinstance(folder, Path) for folder in save_folders) or not all(folder.exists() for folder in save_folders):
+            raise ValueError("All save folders must exist")
 
         # Initialize attributes
         self.num_planes = len(stats)
@@ -97,6 +110,7 @@ class RoiProcessor:
         self.rois_per_plane = [len(stat) for stat in stats]
         self.num_rois = sum(self.rois_per_plane)
         self.references = references
+        self.save_folders = save_folders
 
         # Extract mask data from stats dictionaries
         lam, ypix, xpix = utils.transpose([utils.get_roi_data(stat) for stat in stats])
@@ -159,7 +173,73 @@ class RoiProcessor:
 
         # Measure features
         if autocompute:
-            self.compute_features()
+            self.compute_features(use_saved)
+
+    def compute_features(self, use_saved: bool = True):
+        """Compute all registered features for each ROI.
+
+        FeaturePipelines are registered with the RoiProcessor instance, and each pipeline
+        defines a method that computes a feature based on the attributes of the RoiProcessor
+        instance. compute_features iterates over each pipeline and computes the feature values
+        for each ROI. Resulting feature values are stored in the self.features dictionary.
+
+        Parameters
+        ----------
+        use_saved : bool, optional
+            If True, will attempt to load saved features from disk if they exist. Default is True.
+        """
+        for name, method in self.feature_pipeline_methods.items():
+            if use_saved:
+                # First check if it exists on disk
+                if all((self.save_folders[iplane] / "cellector" / f"{name}.npy").exists() for iplane in range(self.num_planes)):
+                    value_by_plane = self._load_saved_feature(name)
+                    # Then check if the shapes match the ROIs per plane
+                    if all(len(value) == self.rois_per_plane[iplane] for iplane, value in enumerate(value_by_plane)):
+                        # If all checks pass, add the feature to the dictionary and move to the next pipeline
+                        self.add_feature(name, utils.cat_planes(value_by_plane))
+                        continue
+            # If the feature is not saved or the shapes don't match, compute the feature again and add it
+            self.add_feature(name, method(self))
+
+    def add_feature(self, name: str, values: np.ndarray):
+        """Add (or update) the name and values to the self.features dictionary.
+
+        Parameters
+        ----------
+        name : str
+            Name of the feature.
+        values : np.ndarray
+            Feature values for each ROI. Must have the same length as the number of ROIs across all planes.
+        """
+        if len(values) != self.num_rois:
+            raise ValueError(f"Length of feature values ({len(values)}) for feature {name} must match number of ROIs ({self.num_rois})")
+        self.features[name] = values
+
+    def _load_saved_feature(self, name: str):
+        """Load a saved feature from disk for each plane.
+
+        Parameters
+        ----------
+        name : str
+            Name of the feature to load.
+
+        Returns
+        -------
+        List[np.ndarray]
+            List of feature values for each plane.
+        """
+        return [np.load(self.save_folders[iplane] / "cellector" / f"{name}.npy") for iplane in range(self.num_planes)]
+
+    def register_feature_pipeline(self, pipeline: FeaturePipeline):
+        """Register a feature pipeline with the RoiProcessor instance."""
+        if not isinstance(pipeline, FeaturePipeline):
+            raise TypeError("Pipeline must be an instance of FeaturePipeline")
+        if pipeline.name in self.feature_pipeline_methods or pipeline.name in self.feature_pipeline_dependencies:
+            raise ValueError(f"A pipeline called {pipeline.name} has already been registered.")
+        if not all(dep in self.parameters for dep in pipeline.dependencies):
+            raise ValueError(f"The following dependencies for pipeline {pipeline.name} not found in parameters ({', '.join(pipeline.dependencies)})")
+        self.feature_pipeline_methods[pipeline.name] = pipeline.method
+        self.feature_pipeline_dependencies[pipeline.name] = pipeline.dependencies
 
     def update_parameters(self, **kwargs: dict):
         """Update preprocessing parameters and clear affected cache entries.
@@ -226,42 +306,6 @@ class RoiProcessor:
         self_copy = deepcopy(self)
         self_copy.update_parameters(**params)
         return self_copy
-
-    def compute_features(self):
-        """Compute all registered features for each ROI.
-
-        FeaturePipelines are registered with the RoiProcessor instance, and each pipeline
-        defines a method that computes a feature based on the attributes of the RoiProcessor
-        instance. compute_features iterates over each pipeline and computes the feature values
-        for each ROI. Resulting feature values are stored in the self.features dictionary.
-        """
-        for name, method in self.feature_pipeline_methods.items():
-            self.add_feature(name, method(self))
-
-    def add_feature(self, name: str, values: np.ndarray):
-        """Add (or update) the name and values to the self.features dictionary.
-
-        Parameters
-        ----------
-        name : str
-            Name of the feature.
-        values : np.ndarray
-            Feature values for each ROI. Must have the same length as the number of ROIs across all planes.
-        """
-        if len(values) != self.num_rois:
-            raise ValueError(f"Length of feature values ({len(values)}) for feature {name} must match number of ROIs ({self.num_rois})")
-        self.features[name] = values
-
-    def register_feature_pipeline(self, pipeline: FeaturePipeline):
-        """Register a feature pipeline with the RoiProcessor instance."""
-        if not isinstance(pipeline, FeaturePipeline):
-            raise TypeError("Pipeline must be an instance of FeaturePipeline")
-        if pipeline.name in self.feature_pipeline_methods or pipeline.name in self.feature_pipeline_dependencies:
-            raise ValueError(f"A pipeline called {pipeline.name} has already been registered.")
-        if not all(dep in self.parameters for dep in pipeline.dependencies):
-            raise ValueError(f"The following dependencies for pipeline {pipeline.name} not found in parameters ({', '.join(pipeline.dependencies)})")
-        self.feature_pipeline_methods[pipeline.name] = pipeline.method
-        self.feature_pipeline_dependencies[pipeline.name] = pipeline.dependencies
 
     @property
     def centroids(self):
