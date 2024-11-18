@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import QGraphicsProxyWidget, QPushButton
 
 from .roi_processor import RoiProcessor
 from . import utils
+from .io import save_selection
 
 basic_button_style = """
 QWidget {
@@ -162,9 +163,11 @@ class SelectionGUI:
         self.toggle_area = pg.GraphicsLayout()
         self.plot_area = pg.GraphicsLayout()
         self.button_area = pg.GraphicsLayout()
-        self.feature_window.addItem(self.toggle_area, row=0, col=0)
-        self.feature_window.addItem(self.plot_area, row=1, col=0)
-        self.feature_window.addItem(self.button_area, row=2, col=0)
+        self.text_area = pg.LabelItem("welcome to the cell selector GUI", justify="left")
+        self.feature_window.addItem(self.text_area, row=0, col=0)
+        self.feature_window.addItem(self.toggle_area, row=1, col=0)
+        self.feature_window.addItem(self.plot_area, row=2, col=0)
+        self.feature_window.addItem(self.button_area, row=3, col=0)
 
         self.hist_layout = pg.GraphicsLayout()
         self.hist_graphs = {key: [None] for key in self.roi_processor.features}
@@ -221,8 +224,24 @@ class SelectionGUI:
         self.cutoff_lines = {}
         for feature in self.roi_processor.features:
             self.feature_range[feature] = [np.min(self.h_bin_edges[feature]), np.max(self.h_bin_edges[feature])]
-            # TODO: Load from previous if available
-            self.feature_cutoffs[feature] = copy(self.feature_range[feature])
+
+            # Try loading feature cutoffs
+            load_successful = False
+            if all((folder / "cellector" / f"{feature}_criteria.npy").exists() for folder in self.roi_processor.save_folders):
+                cutoffs = [np.load(folder / "cellector" / f"{feature}_criteria.npy", allow_pickle=True) for folder in self.roi_processor.save_folders]
+                if all(c[0] == cutoffs[0][0] and c[1] == cutoffs[0][1] for c in cutoffs):
+                    use_cutoffs = cutoffs[0]
+                    if use_cutoffs[0] is None:
+                        use_cutoffs[0] = self.feature_range[feature][0]
+                        self.feature_active[feature][0] = False
+                    if use_cutoffs[1] is None:
+                        use_cutoffs[1] = self.feature_range[feature][1]
+                        self.feature_active[feature][1] = False
+                    self.feature_cutoffs[feature] = use_cutoffs
+                    load_successful = True
+            if not load_successful:
+                # if loading fails, then set the cutoffs to the full range
+                self.feature_cutoffs[feature] = copy(self.feature_range[feature])
             self.cutoff_lines[feature] = [None] * 2
             for i in range(2):
                 if self.feature_active[feature][i]:
@@ -283,12 +302,8 @@ class SelectionGUI:
         # ---------------------
         # -- now add buttons --
         # ---------------------
-
-        def save_rois(_):
-            self.save_selection()
-
         self.save_button = QPushButton("button", text="save selection")
-        self.save_button.clicked.connect(save_rois)
+        self.save_button.clicked.connect(self.save_selection)
         self.save_button.setStyleSheet(basic_button_style)
         self.save_proxy = QGraphicsProxyWidget()
         self.save_proxy.setWidget(self.save_button)
@@ -300,6 +315,7 @@ class SelectionGUI:
             self.toggle_cell_button.setText("control cells" if self.show_control_cells else "target cells")
             self.masks.data = self.mask_image
             self.labels.data = self.mask_labels
+            self.update_text(f"Now viewing {'control' if self.show_control_cells else 'target'} cells")
 
         self.toggle_cell_button = QPushButton(text="control cells" if self.show_control_cells else "target cells")
         self.toggle_cell_button.clicked.connect(toggle_cells_to_view)
@@ -313,6 +329,7 @@ class SelectionGUI:
             self.use_manual_labels_button.setText("using manual labels" if self.use_manual_labels else "ignoring manual labels")
             # update replot masks and recompute histograms
             self.regenerate_mask_data()
+            self.update_text(f"{'using' if self.use_manual_labels else 'ignoring'} manual labels")
 
         self.use_manual_labels_button = QPushButton(text="using manual labels" if self.use_manual_labels else "ignoring manual labels")
         self.use_manual_labels_button.clicked.connect(toggle_use_manual_labels)
@@ -326,8 +343,9 @@ class SelectionGUI:
             if modifiers == QtCore.Qt.ControlModifier:
                 self.manual_label_active[:] = False
                 self.regenerate_mask_data()
+                self.update_text("You just cleared all manual labels!")
             else:
-                print("clearing manual labels requires a control click")
+                self.update_text("Clearing manual labels requires a control click for safety! Try again.")
 
         self.clear_manual_label_button = QPushButton(text="clear manual labels")
         self.clear_manual_label_button.clicked.connect(clear_manual_labels)
@@ -340,8 +358,9 @@ class SelectionGUI:
             self.only_manual_labels = not self.only_manual_labels
             if self.only_manual_labels:
                 self.use_manual_labels = True
-            self.show_manual_labels_button.setText("only manual labels" if self.onlyManualLabels else "all labels")
+            self.show_manual_labels_button.setText("only manual labels" if self.only_manual_labels else "all labels")
             self.regenerate_mask_data()
+            self.update_text("only showing manual labels" if self.only_manual_labels else "showing all labels")
 
         self.show_manual_labels_button = QPushButton(text="all labels")
         self.show_manual_labels_button.clicked.connect(show_manual_labels)
@@ -354,6 +373,7 @@ class SelectionGUI:
             self.color_state = np.mod(self.color_state + 1, len(self.color_state_names))
             self.color_button.setText(self.color_state_names[self.color_state])
             self.update_label_colors()
+            self.update_text(f"now coloring by {self.color_state_names[self.color_state]}")
 
         self.color_button = QPushButton(text=self.color_state_names[self.color_state])
         self.color_button.setCheckable(False)
@@ -388,6 +408,7 @@ class SelectionGUI:
         def switch_image_label(_):
             self.show_mask_image = not self.show_mask_image
             self.update_visibility()
+            self.update_text(f"now showing {'mask image' if self.show_mask_image else 'mask labels'}")
 
         def update_mask_visibility(_):
             self.mask_visibility = not self.mask_visibility
@@ -407,14 +428,14 @@ class SelectionGUI:
         # create single-click callback for printing data about ROI features
         def single_click_label(_, event):
             if not self.labels.visible:
-                self.viewer.status = "can only manually select cells when the labels are visible!"
+                self.update_text("can only manually select cells when the labels are visible!")
                 return
 
             # get click data
             plane_idx, yidx, xidx = [int(pos) for pos in event.position]
             label_idx = self.labels.data[plane_idx, yidx, xidx]
             if label_idx == 0:
-                self.viewer.status = "single-click on background, no ROI selected"
+                self.update_text("single-click on background, no ROI selected")
                 return
 
             # get ROI data
@@ -428,42 +449,42 @@ class SelectionGUI:
                 print(string_to_print)
 
             # always show message in viewer status
-            self.viewer.status = string_to_print
+            self.update_text(string_to_print)
 
         def double_click_label(_, event):
-            self.viewer.status = "you just double clicked!"  # will be overwritten - useful for debugging
+            self.update_text("you just double clicked!")  # will be overwritten - useful for debugging
 
             # if not looking at labels, then don't allow manual selection (it would be random!)
             if not self.labels.visible:
-                self.viewer.status = "can only manually select cells when the labels are visible!"
+                self.update_text("can only manually select cells when the labels are visible!")
                 return
 
             # if not looking at manual annotations, don't allow manual selection...
             if not self.use_manual_labels:
-                self.viewer.status = "can only manually select cells when the manual labels are being used!"
+                self.update_text("can only manually select cells when the manual labels are being used!")
                 return
 
             plane_idx, yidx, xidx = [int(pos) for pos in event.position]
             label_idx = self.labels.data[plane_idx, yidx, xidx]
             if label_idx == 0:
-                self.viewer.status = "double-click on background, no ROI identity toggled"
+                self.update_text("double-click on background, no ROI selected")
             else:
                 if "Alt" in event.modifiers:
-                    self.viewer.status = "Alt was used, assuming you are trying to single click and not doing a manual label!"
+                    self.update_text("Alt was used, assuming you are trying to single click and not doing a manual label!")
                 else:
                     roi_idx = label_idx - 1
                     if "Control" in event.modifiers:
                         if self.only_manual_labels:
                             self.manual_label_active[roi_idx] = False
-                            self.viewer.status = f"you just removed the manual label from roi: {roi_idx}"
+                            self.update_text(f"you just removed the manual label from roi: {roi_idx}")
                         else:
-                            self.viewer.status = f"you can only remove a label if you are only looking at manual labels!"
+                            self.update_text(f"you can only remove a label if you are only looking at manual labels!")
                     else:
                         # manual annotation: if plotting control cells, then annotate as target (1), if plotting target cells, annotate as control (0)
                         new_label = copy(self.show_control_cells)
                         self.manual_label[roi_idx] = new_label
                         self.manual_label_active[roi_idx] = True
-                        self.viewer.status = f"you just labeled roi: {roi_idx} with the identity: {new_label}"
+                        self.update_text(f"you just labeled roi: {roi_idx} with the identity: {new_label}")
                     self.regenerate_mask_data()
 
         self.labels.mouse_drag_callbacks.append(single_click_label)
@@ -479,6 +500,11 @@ class SelectionGUI:
             self.update_feature_plots()
 
         self.viewer.dims.events.connect(update_plane_idx)
+
+    def update_text(self, text):
+        """Central method for updating text in the text area and on the status area."""
+        self.text_area.setText(text)
+        self.viewer.status = text
 
     def update_visibility(self):
         """Update the visibility of the masks and labels in the napari viewer."""
@@ -532,7 +558,7 @@ class SelectionGUI:
         self.masks.data = self.mask_image
         self.labels.data = self.mask_labels
         features_by_plane = {key: utils.split_planes(value, self.roi_processor.rois_per_plane) for key, value in self.roi_processor.features.items()}
-        idx_selected_by_plane = utils.split_planes(self.idx_selected_masks, self.roi_processor.rois_per_plane)
+        idx_selected_by_plane = utils.split_planes(self.idx_selected, self.roi_processor.rois_per_plane)
         for feature in self.roi_processor.features:
             for iplane in range(self.roi_processor.num_planes):
                 c_feature_values = features_by_plane[feature][iplane][idx_selected_by_plane[iplane]]
@@ -543,21 +569,10 @@ class SelectionGUI:
             self.hist_selected[feature].setOpts(height=self.h_values_selected[feature][self.plane_idx])
 
     def save_selection(self):
-        print("saving target cell curation choices... --- but not implemented!!!!")
-        return
-        # fullRedIdx = np.concatenate(self.redIdx)
-        # fullManualLabels = np.stack((np.concatenate(self.manualLabel), np.concatenate(self.manualLabelActive)))
-        # self.redCell.saveone(fullRedIdx, "mpciROIs.redCellIdx")
-        # self.redCell.saveone(fullManualLabels, "mpciROIs.redCellManualAssignments")
-        # for idx, name in enumerate(self.roi_processor.features):
-        #     cFeatureCutoffs = self.featureCutoffs[idx]
-        #     if not (self.feature_active[idx][0]):
-        #         cFeatureCutoffs[0] = np.nan
-        #     if not (self.feature_active[idx][1]):
-        #         cFeatureCutoffs[1] = np.nan
-        #     self.redCell.saveone(self.featureCutoffs[idx], self.redCell.oneNameFeatureCutoffs(name))
-
-        # print(f"Red Cell curation choices are saved for session {self.redCell.sessionPrint()}")
+        """Save the current selection of cells to files."""
+        manual_selection = np.stack((self.manual_label, self.manual_label_active)).T
+        save_selection(self.roi_processor, self.idx_selected, self.feature_cutoffs, self.feature_active, manual_selection)
+        self.update_text("Selection saved!")
 
     # ------------------------------
     # --------- properties ---------
@@ -568,16 +583,16 @@ class SelectionGUI:
 
         Each pixel in the image is the sum of the intensity footprints of the selected
         masks in each plane. Masks are included in the sum if they are selected by the
-        user (i.e. True in idx_selected_masks).
+        user (i.e. True in idx_selected).
 
         Returns
         -------
         mask_image_by_plane : np.ndarray (float)
             The mask image for each plane in the volume. Filters the masks in each plane
-            by idx_selected_masks and sums over their intensity footprints to create a
+            by idx_selected and sums over their intensity footprints to create a
             single image for each plane.
         """
-        idx_selected = self.idx_selected_masks
+        idx_selected = self.idx_selected
         image_data = np.zeros((self.roi_processor.num_planes, self.roi_processor.ly, self.roi_processor.lx), dtype=float)
         for iroi, (plane, lam, ypix, xpix) in enumerate(
             zip(self.roi_processor.plane_idx, self.roi_processor.lam, self.roi_processor.ypix, self.roi_processor.xpix)
@@ -593,7 +608,7 @@ class SelectionGUI:
         ROIs are assigned an index that is unique across all ROIs independent of plane.
         The index is offset by 1 because napari uses 0 to indicate "no label". ROIs are
         only presented if the are currently "selected" by the user (i.e. True in
-        idx_selected_masks).
+        idx_selected).
 
         Returns
         -------
@@ -602,7 +617,7 @@ class SelectionGUI:
             index to the ROI - and if ROIs are overlapping then the last ROI will be
             used. Only ROIs that are selected by the user are included in the labels.
         """
-        idx_selected = self.idx_selected_masks
+        idx_selected = self.idx_selected
         label_data = np.zeros((self.roi_processor.num_planes, self.roi_processor.ly, self.roi_processor.lx), dtype=int)
         for iroi, (plane, ypix, xpix) in enumerate(zip(self.roi_processor.plane_idx, self.roi_processor.ypix, self.roi_processor.xpix)):
             if idx_selected[iroi]:
@@ -610,12 +625,12 @@ class SelectionGUI:
         return label_data
 
     @property
-    def idx_selected_masks(self):
+    def idx_selected(self):
         """Return a boolean index of the currently selected masks.
 
         Returns
         -------
-        idx_selected_masks_by_plane : np.ndarray (bool)
+        idx_selected_by_plane : np.ndarray (bool)
             The indices of the selected masks across planes.
         """
         if self.only_manual_labels:
