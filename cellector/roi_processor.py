@@ -2,8 +2,8 @@ from typing import List, Optional, Dict
 from copy import deepcopy
 import numpy as np
 from . import utils
-from . import features
 from .filters import filter
+from .feature_pipelines import FeaturePipeline, standard_pipelines
 
 # Might be useful for optimizing parameters
 # from sklearn.model_selection import ParameterGrid
@@ -34,40 +34,6 @@ PARAM_CACHE_MAPPING = dict(
     highcut=["filtered_centered_references"],
     order=["filtered_centered_references"],
 )
-
-# Mapping of parameters to features that are affected by the change
-PARAM_FEATURE_MAPPING = dict(
-    surround_iterations=["in_vs_out", "corr_coef"],
-    centered_width=["phase_corr", "in_vs_out", "corr_coef"],
-    centroid_method=["phase_corr", "in_vs_out", "corr_coef"],
-    window_kernel=["phase_corr"],
-    phase_corr_eps=["phase_corr"],
-    lowcut=["dot_product", "corr_coef"],
-    highcut=["dot_product", "corr_coef"],
-    order=["dot_product", "corr_coef"],
-)
-
-FEATURE_METHODS = dict(
-    phase_corr="compute_phase_correlation",
-    dot_product="compute_dot_product",
-    corr_coef="compute_corr_coef",
-    in_vs_out="compute_in_vs_out",
-)
-
-
-class FeaturePipeline:
-    """
-    Pipeline for processing and analyzing mask & fluorescence data across multiple image planes.
-
-    This class handles the processing of mask & fluorescence data by managing masks
-    and reference images across multiple planes, providing functionality for feature
-    calculation and analysis.
-    """
-
-    def __init__(self, name, method, dependencies):
-        self.name = name
-        self.method = method
-        self.dependencies = dependencies
 
 
 class RoiProcessor:
@@ -160,8 +126,10 @@ class RoiProcessor:
         self.xpix_flat = xpix_flat
         self.flat_roi_idx = flat_roi_idx
 
-        # Initialize feature dictionary
+        # Initialize feature and pipeline dictionary
         self.features = {}
+        self.feature_pipeline_methods = {}
+        self.feature_pipeline_dependencies = {}
 
         # Initialize preprocessing cache
         self._cache = {}
@@ -185,11 +153,9 @@ class RoiProcessor:
             raise ValueError(f"Invalid parameter(s): {', '.join(set(kwargs) - set(DEFAULT_PARAMETERS))}")
         self.parameters.update(kwargs)
 
-        # Register feature methods
-        for feature_name in FEATURE_METHODS:
-            if isinstance(FEATURE_METHODS[feature_name], str) and hasattr(self, FEATURE_METHODS[feature_name]):
-                # If the feature name is a string
-                raise ValueError(f"Feature method {FEATURE_METHODS[feature_name]} not found in RoiProcessor")
+        # register feature pipelines
+        for pipeline in standard_pipelines:
+            self.register_feature_pipeline(pipeline)
 
         # Measure features
         if autocompute:
@@ -202,10 +168,10 @@ class RoiProcessor:
         upon first access, and also for feature computation. When parameters are updated,
         the cache entries that are affected by the change are cleared so they can be
         recomputed with the new parameters when accessed again. Features are automatically
-        regenerated if they depend on the updated parameters.
+        regenerated if they depend on the updated parameters and have already been computed.
 
-        For a list of parameters that affect each cache entry or feature, see the two
-        global dictionaries called PARAM_CACHE_MAPPING and PARAM_FEATURE_MAPPING.
+        Parameter dependencies are indicated in the PARAM_CACHE_MAPPING dictionary.
+        Feature dependencies are indicated in the feature_pipeline_dependencies dictionary.
 
         Parameters
         ----------
@@ -218,20 +184,30 @@ class RoiProcessor:
         dict
             Updated dictionary of parameters.
         """
+        # First check if any invalid parameters are provided
         extra_kwargs = set(kwargs) - set(self.parameters)
         if extra_kwargs:
             raise ValueError(f"Invalid parameter(s): {', '.join(extra_kwargs)}")
+
+        # For every changed parameter, identify affected cache / features
         affected_cache = []
         affected_features = []
         for key, value in kwargs.items():
             if key in self.parameters and self.parameters[key] != value:
                 affected_cache.extend(PARAM_CACHE_MAPPING.get(key, []))
-                affected_features.extend(PARAM_FEATURE_MAPPING.get(key, []))
+                for pipeline, dependencies in self.feature_pipeline_dependencies.items():
+                    if key in dependencies:
+                        affected_features.append(pipeline)
                 self.parameters[key] = value
+
+        # Clear affected cache to be recomputed lazily whenever it is needed again
         for cache_key in set(affected_cache):
             self._cache.pop(cache_key, None)
+
+        # Recompute affected features if they have already been computed
         for feature_key in set(affected_features):
-            self._feature_method(feature_key)()
+            if feature_key in self.features:
+                self.add_feature(feature_key, self.feature_pipeline_methods[feature_key](self))
 
     def copy_with_params(self, params: dict):
         """Create a new processor instance with updated parameters.
@@ -252,21 +228,15 @@ class RoiProcessor:
         return self_copy
 
     def compute_features(self):
-        """Compute all standard features for each ROI.
+        """Compute all registered features for each ROI.
 
-        Features are computed and stored in the self.features dictionary of the RoiProcessor instance.
+        FeaturePipelines are registered with the RoiProcessor instance, and each pipeline
+        defines a method that computes a feature based on the attributes of the RoiProcessor
+        instance. compute_features iterates over each pipeline and computes the feature values
+        for each ROI. Resulting feature values are stored in the self.features dictionary.
         """
-        for feature_name in FEATURE_METHODS:
-            self._feature_method(feature_name)()
-
-    def _feature_method(self, feature_name: str):
-        """Return the method to compute the given feature name."""
-        if feature_name not in FEATURE_METHODS:
-            raise ValueError(f"Feature {feature_name} not found in feature registry")
-        feature_method = FEATURE_METHODS[feature_name]
-        if not hasattr(self, feature_method):
-            raise ValueError(f"Feature method {feature_method} not found in RoiProcessor")
-        return getattr(self, FEATURE_METHODS[feature_name])
+        for name, method in self.feature_pipeline_methods.items():
+            self.add_feature(name, method(self))
 
     def add_feature(self, name: str, values: np.ndarray):
         """Add (or update) the name and values to the self.features dictionary.
@@ -282,83 +252,16 @@ class RoiProcessor:
             raise ValueError(f"Length of feature values ({len(values)}) for feature {name} must match number of ROIs ({self.num_rois})")
         self.features[name] = values
 
-    def compute_phase_correlation(self):
-        """Compute the phase correlation between the masks and reference images.
-
-        Returns
-        -------
-        np.ndarray
-            The phase correlation between the masks and reference images across planes.
-            Default behavior is to not return the feature values, and instead to store them
-            in the self.features dictionary of the RedCellProcessor instance.
-
-        See Also
-        --------
-        features.phase_correlation_zero : Function that computes the phase correlation values.
-        """
-        # Input to phase correlation is centered masks and centered references
-        centered_masks = self.centered_masks
-        centered_references = self.centered_references
-
-        # Window the centered masks and references
-        windowed_masks = filter(centered_masks, "window", kernel=self.parameters["window_kernel"])
-        windowed_references = filter(centered_references, "window", kernel=self.parameters["window_kernel"])
-
-        # Phase correlation requires windowing
-        return features.phase_correlation_zero(windowed_masks, windowed_references, eps=self.parameters["phase_corr_eps"])
-
-    def compute_dot_product(self):
-        """Compute the dot product between the masks and filtered reference images.
-
-        Returns
-        -------
-        np.ndarray
-            The dot product between the masks and reference images across planes.
-            Default behavior is to not return the feature values, and instead to store them
-            in the self.features dictionary of the RedCellProcessor instance.
-
-        See Also
-        --------
-        features.dot_product : Function that computes the dot product values.
-        features.dot_product_array : Alternative that uses mask images instead of weights and pixel indices.
-        """
-        return features.dot_product(self.lam, self.ypix, self.xpix, self.plane_idx, self.filtered_references)
-
-    def compute_corr_coef(self):
-        """Compute the correlation coefficient between the masks and reference images.
-
-        Returns
-        -------
-        np.ndarray
-            The correlation coefficient between the masks and reference images across planes.
-            Default behavior is to not return the feature values, and instead to store them
-            in the self.features dictionary of the RedCellProcessor instance.
-
-        See Also
-        --------
-        features.correlation_coefficient : Function that computes the correlation coefficient values.
-        """
-        masks_surround, references_surround = utils.surround_filter(
-            self.centered_masks,
-            self.filtered_centered_references,
-            iterations=self.parameters["surround_iterations"],
-        )
-        return features.compute_correlation(masks_surround, references_surround)
-
-    def compute_in_vs_out(self):
-        """Compute the in vs. out feature for each ROI.
-
-        The in vs. out feature is the ratio of the dot product of the mask and reference
-        image inside the mask to the dot product inside plus outside the mask.
-
-        Returns
-        -------
-        np.ndarray
-            The in vs. out feature for each ROI. Default behavior is to not return the
-            feature values, and instead to store them in the self.features dictionary of
-            the RedCellProcessor instance.
-        """
-        return features.in_vs_out(self.centered_masks, self.centered_references, iterations=self.parameters["surround_iterations"])
+    def register_feature_pipeline(self, pipeline: FeaturePipeline):
+        """Register a feature pipeline with the RoiProcessor instance."""
+        if not isinstance(pipeline, FeaturePipeline):
+            raise TypeError("Pipeline must be an instance of FeaturePipeline")
+        if pipeline.name in self.feature_pipeline_methods or pipeline.name in self.feature_pipeline_dependencies:
+            raise ValueError(f"A pipeline called {pipeline.name} has already been registered.")
+        if not all(dep in self.parameters for dep in pipeline.dependencies):
+            raise ValueError(f"The following dependencies for pipeline {pipeline.name} not found in parameters ({', '.join(pipeline.dependencies)})")
+        self.feature_pipeline_methods[pipeline.name] = pipeline.method
+        self.feature_pipeline_dependencies[pipeline.name] = pipeline.dependencies
 
     @property
     def centroids(self):
