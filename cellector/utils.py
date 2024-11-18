@@ -1,7 +1,5 @@
-from typing import List, Tuple, Optional, Sequence
+from typing import List, Tuple, Optional, Sequence, Union
 from pathlib import Path
-from multiprocessing import Pool, cpu_count
-from tqdm import tqdm
 import numpy as np
 import numba as nb
 from scipy.ndimage import binary_dilation, generate_binary_structure
@@ -65,64 +63,7 @@ def transpose(sequence: Sequence) -> List:
     return map(list, zip(*sequence))
 
 
-def _get_pixel_data_single(mask: np.ndarray):
-    """Get pixel data from a single mask.
-
-    Extracts the intensity values, y-coordinates, and x-coordinates from a single mask
-    footprint with intensity values.
-
-    Parameters
-    ----------
-    mask : np.ndarray
-        A 2D mask footprint with intensity values.
-
-    Returns
-    -------
-    lam, ypix, xpix : tuple of np.ndarrays
-        Intensity values, y-coordinates, and x-coordinates for the mask.
-    """
-    ypix, xpix = np.where(mask)
-    lam = mask[ypix, xpix]
-    return lam, ypix, xpix
-
-
-def get_pixel_data(mask_volume, as_stats: bool = True, verbose: bool = True):
-    """Get pixel data from a mask volume.
-
-    Extracts the intensity values, y-coordinates, and x-coordinates from a mask volume
-    where each slice of the volume corresponds to a single ROI.
-
-    Parameters
-    ----------
-    mask_volume : np.ndarray
-        A 3D mask volume with shape (num_rois, height, width) where each slice is a mask
-        footprint with intensity values.
-    as_stats : bool, optional
-        Whether to return the data as a list of dictionaries with keys "lam", "ypix", and "xpix"
-        or to return a tuple of lists for each data type. Default is True.
-    verbose : bool, optional
-        Whether to use a tqdm progress bar to show progress. Default is True.
-
-    Returns
-    -------
-    lam, ypix, xpix : tuple of list of np.ndarrays
-        Intensity values, y-coordinates, and x-coordinates for each ROI.
-
-    or if as_stats is True:
-
-    stats : list of dict
-        List of dictionaries with keys "lam", "ypix", and "xpix" for each ROI.
-    """
-    iterable = tqdm(mask_volume, desc="Extracting mask data", leave=False) if verbose else mask_volume
-    with Pool(max(2, cpu_count() - 2)) as pool:
-        results = pool.map(_get_pixel_data_single, iterable)
-    lam, ypix, xpix = transpose(results)
-    if as_stats:
-        return [dict(lam=l, ypix=y, xpix=x) for l, y, x in zip(lam, ypix, xpix)]
-    return lam, ypix, xpix
-
-
-def get_s2p_data(s2p_dir: Path, reference_key: str = "meanImg_chan2"):
+def get_s2p_data(s2p_folders: List[Path], reference_key: str = "meanImg_chan2"):
     """Get list of stats and chan2 reference images from all planes in a suite2p directory.
 
     suite2p saves the statistics and reference images for each plane in separate
@@ -131,11 +72,10 @@ def get_s2p_data(s2p_dir: Path, reference_key: str = "meanImg_chan2"):
 
     Parameters
     ----------
-    s2p_dir : Path
-        Path to the suite2p directory, which contains directories for each plane in the
-        format "plane0", "plane1", etc.
+    s2p_folders : list of Path
+        List of directories that contain the suite2p output for each plane (stat.npy and ops.npy).
     reference_key : str, optional
-        Key to use for the reference image in the ops dictionary. Default is "meanImg_chan2".
+        Key to use for the reference image. Default is "meanImg_chan2".
 
     Returns
     -------
@@ -144,12 +84,13 @@ def get_s2p_data(s2p_dir: Path, reference_key: str = "meanImg_chan2"):
     references : list of np.ndarrays
         Each element of references is an image (usually of average red fluorescence) for each plane.
     """
-    planes = s2p_dir.glob("plane*")
     stats = []
     references = []
-    for plane in planes:
-        stats.append(np.load(plane / "stat.npy", allow_pickle=True))
-        ops = np.load(plane / "ops.npy", allow_pickle=True).item()
+    for folder in s2p_folders:
+        stats.append(np.load(folder / "stat.npy", allow_pickle=True))
+        ops = np.load(folder / "ops.npy", allow_pickle=True).item()
+        if reference_key not in ops:
+            raise ValueError(f"Reference key ({reference_key}) not found in ops.npy file ({folder / 'ops.npy'})!")
         references.append(ops[reference_key])
     if not all(ref.shape == references[0].shape for ref in references):
         raise ValueError("Reference images must have the same shape as each other!")
@@ -158,7 +99,7 @@ def get_s2p_data(s2p_dir: Path, reference_key: str = "meanImg_chan2"):
     return stats, references
 
 
-def get_s2p_redcell(s2p_dir: Path):
+def get_s2p_redcell(s2p_folders: List[Path]):
     """Get red cell probability masks from all planes in a suite2p directory.
 
     Extracts the red cell probability masks from each plane in a suite2p directory
@@ -169,9 +110,8 @@ def get_s2p_redcell(s2p_dir: Path):
 
     Parameters
     ----------
-    s2p_dir : Path
-        Path to the suite2p directory, which contains directories for each plane in the
-        format "plane0", "plane1", etc.
+    s2p_folders : list of Path
+        List of directories that contain the suite2p output for each plane (redcell.npy).
 
     Returns
     -------
@@ -179,10 +119,11 @@ def get_s2p_redcell(s2p_dir: Path):
         List of red cell probabilities for each plane. Each array has length N corresponding
         to the number of ROIs in that plane.
     """
-    planes = s2p_dir.glob("plane*")
     redcell = []
-    for plane in planes:
-        c_redcell = np.load(plane / "redcell.npy")
+    for folder in s2p_folders:
+        if not (folder / "redcell.npy").exists():
+            raise FileNotFoundError(f"Could not find redcell.npy file in {folder}!")
+        c_redcell = np.load(folder / "redcell.npy")
         redcell.append(c_redcell[:, 1])
     return redcell
 
