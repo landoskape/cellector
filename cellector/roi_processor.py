@@ -5,7 +5,7 @@ import numpy as np
 from . import io
 from . import utils
 from .filters import filter
-from .feature_pipelines import FeaturePipeline, standard_pipelines
+from .features import FeaturePipeline, standard_pipelines
 
 # Might be useful for optimizing parameters
 # from sklearn.model_selection import ParameterGrid
@@ -112,7 +112,7 @@ class RoiProcessor:
 
         root_dir = Path(root_dir)
         if not root_dir.is_dir():
-            raise ValueError("Root directory must be a valid directory path")
+            raise ValueError("root_dir must be existing directory.")
 
         # Initialize attributes
         self.num_planes = references.shape[0]
