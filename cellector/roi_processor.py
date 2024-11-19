@@ -51,9 +51,10 @@ class RoiProcessor:
 
     def __init__(
         self,
-        stats: List[np.ndarray],
-        references: List[np.ndarray],
         root_dir: Union[Path, str],
+        stats: List[Dict],
+        references: np.ndarray,
+        plane_idx: np.ndarray,
         extra_features: Optional[Dict[str, List[np.ndarray]]] = None,
         autocompute: bool = True,
         use_saved: bool = True,
@@ -63,13 +64,17 @@ class RoiProcessor:
 
         Parameters
         ----------
-        stats: List[np.array[dict]]
-            List of dictionaries containing ROI statistics for each plane.
+        stats: List[dict]
+            List of dictionaries containing ROI statistics for each mask.
             required keys: 'lam', 'xpix', 'ypix', which are lists of numbers corresponding to
             the weight of each pixel, and the x and y indices of each pixel in the mask
-        references : List[np.ndarray]
-            List of reference images for each plane. Each element is a 2D
-            numpy array with shape (lx, ly).
+        references : np.ndarray
+            3D numpy array containing reference images for each plane. The first dimension
+            should be the number of planes, and the second and third dimensions should be the
+            height and width of the reference images (notated as ly and lx).
+        plane_idx : np.ndarray
+            1D numpy array containing the plane index to each ROI. The length of this array
+            should be equal to the number of ROIs in stats.
         root_dir : Union[Path, str]
             Path to the root directory where the data is stored. This is used to save and load
             features from disk.
@@ -86,52 +91,47 @@ class RoiProcessor:
         **kwargs : dict
             Additional parameters to update the default parameters used for preprocessing.
         """
-        # Validate inputs are lists
-        if not isinstance(stats, list) or not isinstance(references, list):
-            raise TypeError("Stats and references must be lists.")
+        # Validate input data
+        if not isinstance(stats, list) or not all(isinstance(stat, dict) for stat in stats):
+            raise TypeError("Stats must be a list of dictionaries.")
+        for stat in stats:
+            if not all(key in stat for key in ["lam", "xpix", "ypix"]):
+                raise ValueError("Each stat dictionary must contain keys 'lam', 'xpix', and 'ypix'")
+        if not isinstance(references, np.ndarray) or references.ndim != 3:
+            raise TypeError("References must be a 3D numpy array")
+        if not isinstance(plane_idx, np.ndarray) or plane_idx.ndim != 1:
+            raise TypeError("Plane index must be a 1D numpy array")
+        if len(stats) != len(plane_idx):
+            raise ValueError("Number of mask arrays must match plane index array")
+        if np.max(plane_idx) >= references.shape[0]:
+            raise ValueError("Plane index values exceed number of reference images")
 
-        if not stats or not references:
-            raise ValueError("Stats and references lists cannot be empty")
-
-        # Validate number of planes match
-        if len(stats) != len(references):
-            raise ValueError(f"Number of mask arrays ({len(stats)}) must match reference images ({len(references)})")
-
-        if not all(isinstance(ref, np.ndarray) for ref in references) or not all(ref.ndim == 2 for ref in references):
-            raise ValueError("All reference images must be 2D numpy arrays")
+        # Make sure that the plane index is sorted
+        if not np.all(np.diff(plane_idx) >= 0):
+            raise ValueError("Plane index of each ROI must be in ascending order")
 
         root_dir = Path(root_dir)
         if not root_dir.is_dir():
             raise ValueError("Root directory must be a valid directory path")
 
         # Initialize attributes
-        self.num_planes = len(stats)
-        self.lx, self.ly = references[0].shape
-        self.rois_per_plane = [len(stat) for stat in stats]
-        self.num_rois = sum(self.rois_per_plane)
+        self.num_planes = references.shape[0]
+        self.lx, self.ly = references.shape[1:]
+        self.num_rois = len(stats)
+        self.rois_per_plane = np.bincount(plane_idx)
         self.references = references
+        self.plane_idx = plane_idx
         self.root_dir = root_dir
 
         # Extract mask data from stats dictionaries
-        lam, ypix, xpix = utils.transpose([utils.get_roi_data(stat) for stat in stats])
+        self.lam, self.ypix, self.xpix = utils.get_roi_data(stats)
 
         # Validate mask data for each plane
-        for iplane, (lm, xp, yp) in enumerate(zip(lam, xpix, ypix)):
-            max_xp = max(max(x) for x in xp)
-            max_yp = max(max(y) for y in yp)
-            if max_xp >= self.lx or max_yp >= self.ly:
-                raise ValueError(f"Pixel indices exceed image dimensions in plane {iplane}")
-            for l, x, y in zip(lm, xp, yp):
-                if not (len(l) == len(x) == len(y)):
-                    raise ValueError(f"Mismatched lengths of mask data in plane {iplane}")
-
-        # Store mask data as concatenated planes
-        self.lam = utils.cat_planes(lam)
-        self.ypix = utils.cat_planes(ypix)
-        self.xpix = utils.cat_planes(xpix)
-
-        # Get plane index to each ROI
-        self.plane_idx = np.repeat(np.arange(self.num_planes), self.rois_per_plane)
+        for lm, xp, yp in zip(self.lam, self.xpix, self.ypix):
+            if not (len(lm) == len(xp) == len(yp)):
+                raise ValueError("Mismatched lengths of mask data")
+        if max(max(x) for x in self.xpix) >= self.lx or max(max(y) for y in self.ypix) >= self.ly:
+            raise ValueError("Pixel indices exceed image dimensions")
 
         # Store flattened mask data for some optimized implementations
         lam_flat, ypix_flat, xpix_flat, flat_roi_idx = utils.flatten_roi_data(self.lam, self.ypix, self.xpix)
