@@ -20,11 +20,40 @@ fluorescence. There's also a system for manual annotation if the automated syste
 quite get it all right. 
 
 ## Installation
+This package is installable with pip from PyPI. It is a lightweight package with minimal
+dependencies, so is probably compatible with other python environments you might use. 
+If you're starting from scratch, first make a python environment, activate it, and
+install ``cellector`` with pip. If you are using an existing environment, skip the first
+two steps and just do pip install from within the environment. 
 ```bash
+conda create -n cellector
+conda activate cellector
 pip install cellector
 ```
 
 ## Usage and Tutorial
+The basic workflow of this package is as follows:
+1. Construct an ``RoiProcessor`` object.
+2. Use the ``SelectionGUI``. 
+3. Save the data.
+4. Repeat (or use scripting to speed up).
+
+We've provided a few functions to make ``RoiProcessor`` objects that work differently
+depending on what kind of data you are starting with. For an exhaustive list, go
+[here](./docs/examples.md). If you are working directly on the output of suite2p, use:
+```python
+from cellector.io import create_from_suite2p
+suite2p_dir = # define your suite2p path - the one with plane0, plane1, ... in it
+roi_processor = create_from_suite2p(suite2p_dir)
+```
+
+Then, open the ``SelectionGUI`` as follows:
+```python
+from cellector.gui import SelectionGUI
+gui = SelectionGUI(roi_processor)
+```
+
+Then, use the GUI and hit save! Instructions for the GUI are coming. 
 
 ## Contributing
 Feel free to contribute to this project by opening issues or submitting pull
