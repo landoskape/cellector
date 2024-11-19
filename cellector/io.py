@@ -1,10 +1,10 @@
-from typing import Union, Dict, Optional
+from typing import List, Union, Dict, Optional
 from copy import copy
 from pathlib import Path
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 import numpy as np
-from .utils import transpose, get_s2p_data, get_s2p_redcell, split_planes
+from .utils import transpose, get_s2p_data, get_s2p_redcell, cat_planes
 from .roi_processor import RoiProcessor
 
 
@@ -65,6 +65,7 @@ class Suite2pLoader:
         self.get_s2p_folders()
         self.num_planes = len(self.folders)
         self.stats, self.references = get_s2p_data(self.folders, reference_key=self.reference_key)
+        self.rois_per_plane = [len(stat) for stat in self.stats]
 
         # Get redcell data if it exists
         if use_redcell and all((folder / "redcell.npy").exists() for folder in self.folders):
@@ -113,6 +114,7 @@ class Suite2pLoader:
 def create_from_suite2p(
     suite2p_dir: Union[Path, str],
     use_redcell: bool = True,
+    reference_key: str = "meanImg_chan2",
     extra_features: dict = {},
     autocompute: bool = True,
     clear_existing: bool = False,
@@ -124,7 +126,9 @@ def create_from_suite2p(
     suite2p_dir : Path or str
         Path to the suite2p directory.
     use_redcell : bool, optional
-        Whether to attempt to load redcell data from suite2p folders. Default is True.
+        Whether to load redcell data from suite2p folders. Default is True.
+    reference_key : str, optional
+        Key to use for reference images in the suite2p folders. Default is "meanImg_chan2".
     extra_features : dict, optional
         Extra features to add to the RoiProcessor object. Default is empty.
     autocompute : bool, optional
@@ -133,17 +137,99 @@ def create_from_suite2p(
     Returns
     -------
     roi_processor : RoiProcessor
-        RoiProcessor object with suite2p data loaded that uses the suite2p_dir as the root directory.
+        RoiProcessor object with suite2p masks and reference images loaded that uses the suite2p_dir as the root directory.
     """
-    s2p_data = Suite2pLoader(suite2p_dir, use_redcell=use_redcell)
+    s2p_data = Suite2pLoader(suite2p_dir, use_redcell=use_redcell, reference_key=reference_key)
     if s2p_data.redcell is not None:
         extra_features["red_s2p"] = s2p_data.redcell
 
     if clear_existing:
         clear_cellector_files(suite2p_dir)
 
+    # Build data in appropriate format for RoiProcessor
+    stats = cat_planes(s2p_data.stats)
+    references = np.stack(s2p_data.references)
+    plane_idx = np.repeat(np.arange(s2p_data.num_planes), s2p_data.rois_per_plane)
+
     # Initialize roi_processor object with suite2p data
-    return RoiProcessor(s2p_data.stats, s2p_data.references, suite2p_dir, extra_features=extra_features, autocompute=autocompute)
+    return RoiProcessor(suite2p_dir, stats, references, plane_idx, extra_features=extra_features, autocompute=autocompute)
+
+
+def create_from_mask_volume(
+    root_dir: Union[Path, str],
+    mask_volume: np.ndarray,
+    references: np.ndarray,
+    plane_idx: np.ndarray,
+    extra_features: dict = {},
+    autocompute: bool = True,
+    clear_existing: bool = False,
+):
+    """Create a RoiProcessor object
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory which will be used for saving results.
+    mask_volume : np.ndarray
+        A 3D mask volume with shape (num_rois, height, width) where each slice is a mask
+        footprint with intensity values and zeros elsewhere.
+    references : np.ndarray
+        A 3D reference volume with shape (num_planes, height, width) where each slice is a reference
+        image for a plane containing the fluorescence values to compare masks to.
+    plane_idx : np.ndarray
+        A 1D array of plane indices for each ROI in the mask volume.
+    extra_features : dict, optional
+        Extra features to add to the RoiProcessor object. Default is empty.
+    autocompute : bool, optional
+        Whether to automatically compute all features for the RoiProcessor object. Default is True.
+
+    Returns
+    -------
+    roi_processor : RoiProcessor
+        RoiProcessor object with roi masks and reference data loaded.
+    """
+    stats = get_pixel_data(mask_volume)
+    if clear_existing:
+        clear_cellector_files(root_dir)
+    return RoiProcessor(root_dir, stats, references, plane_idx, extra_features=extra_features, autocompute=autocompute)
+
+
+def create_from_pixel_data(
+    root_dir: Union[Path, str],
+    stats: List[dict],
+    references: np.ndarray,
+    plane_idx: np.ndarray,
+    extra_features: dict = {},
+    autocompute: bool = True,
+    clear_existing: bool = False,
+):
+    """Create a RoiProcessor object
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory which will be used for saving results.
+    stats : List[dict]
+        List of dictionaries with keys "lam", "ypix", and "xpix" for each ROI containing the intensity values,
+        y-coordinates, and x-coordinates for each ROI.
+    references : np.ndarray
+        A 3D reference volume with shape (num_planes, height, width) where each slice is a reference
+        image for a plane containing the fluorescence values to compare masks to.
+    plane_idx : np.ndarray
+        A 1D array of plane indices for each ROI in the mask volume.
+    extra_features : dict, optional
+        Extra features to add to the RoiProcessor object. Default is empty.
+    autocompute : bool, optional
+        Whether to automatically compute all features for the RoiProcessor object. Default is True.
+
+    Returns
+    -------
+    roi_processor : RoiProcessor
+        RoiProcessor object with roi masks and reference data loaded.
+    """
+    if clear_existing:
+        clear_cellector_files(root_dir)
+    return RoiProcessor(root_dir, stats, references, plane_idx, extra_features=extra_features, autocompute=autocompute)
 
 
 def get_save_directory(root_dir: Union[Path, str]):
