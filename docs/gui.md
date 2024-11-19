@@ -46,11 +46,17 @@ are controlled by key strokes.
 
 ## Key strokes
 t: toggle control vs target cells in selection
+
 s: switch between mask images and mask labels
+
 v: turn on/off the visibility of masks
+
 r: turn on/off the visibility of the reference
+
 c: go to next color state (i.e. random, or pseudocoloring each label by its feature value)
+
 a: change colormap (only applies if not in random color state)
+
 control-c: save selection (this will save the target cells - not the currently selected 
 cells, so if you are currently showing control cells, it'll always save control cells).
 
