@@ -211,12 +211,12 @@ def create_from_suite2p(
     roi_processor : RoiProcessor
         RoiProcessor object with suite2p masks and reference images loaded that uses the suite2p_dir as the root directory.
     """
+    if clear_existing:
+        clear_cellector_files(suite2p_dir)
+
     s2p_data = Suite2pLoader(suite2p_dir, use_redcell=use_redcell, reference_key=reference_key)
     if s2p_data.redcell is not None:
         extra_features["red_s2p"] = s2p_data.redcell
-
-    if clear_existing:
-        clear_cellector_files(suite2p_dir)
 
     # Build data in appropriate format for RoiProcessor
     stats = cat_planes(s2p_data.stats)
@@ -335,6 +335,23 @@ def clear_cellector_files(root_dir: Union[Path, str]):
         save_dir.rmdir()
 
 
+def save_feature(root_dir: Union[Path, str], name: str, feature: np.ndarray):
+    """Save a feature to disk.
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory.
+    name : str
+        Name of the feature to save.
+    feature : np.ndarray
+        Feature data to save to disk.
+    """
+    save_dir = get_save_directory(root_dir)
+    save_dir.mkdir(exist_ok=True)
+    np.save(save_dir / f"{name}.npy", feature)
+
+
 def load_saved_feature(root_dir: Union[Path, str], name: str):
     """Load a feature from disk.
 
@@ -373,6 +390,23 @@ def is_feature_saved(root_dir: Union[Path, str], name: str):
     return (save_dir / f"{name}.npy").exists()
 
 
+def save_criteria(root_dir: Union[Path, str], name: str, criteria: np.ndarray):
+    """Save a feature criterion to disk.
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory.
+    name : str
+        Name of the feature criterion to save.
+    criteria : np.ndarray
+        Criterion data to save to disk.
+    """
+    save_dir = get_save_directory(root_dir)
+    save_dir.mkdir(exist_ok=True)
+    np.save(save_dir / f"{name}_criteria.npy", criteria)
+
+
 def load_saved_criteria(root_dir: Union[Path, str], name: str):
     """Load a feature criterion from disk.
 
@@ -409,6 +443,55 @@ def is_criteria_saved(root_dir: Union[Path, str], name: str):
     """
     save_dir = get_save_directory(root_dir)
     return (save_dir / f"{name}_criteria.npy").exists()
+
+
+def save_manual_selection(root_dir: Union[Path, str], manual_selection: np.ndarray):
+    """Save manual selection labels to disk.
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory.
+    manual_selection : np.ndarray
+        Manual selection labels to save to disk.
+    """
+    save_dir = get_save_directory(root_dir)
+    save_dir.mkdir(exist_ok=True)
+    np.save(save_dir / "manual_selection.npy", manual_selection)
+
+
+def load_manual_selection(root_dir: Union[Path, str]):
+    """Load manual selection labels from disk.
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory.
+
+    Returns
+    -------
+    manual_selection : np.ndarray
+        Manual selection labels loaded from disk.
+    """
+    save_dir = get_save_directory(root_dir)
+    return np.load(save_dir / "manual_selection.npy")
+
+
+def is_manual_selection_saved(root_dir: Union[Path, str]):
+    """Check if manual selection labels exist on disk.
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory.
+
+    Returns
+    -------
+    exists : bool
+        Whether manual selection labels exist on disk.
+    """
+    save_dir = get_save_directory(root_dir)
+    return (save_dir / "manual_selection.npy").exists()
 
 
 def save_selection(
@@ -454,13 +537,13 @@ def save_selection(
 
     # Save features values for each plane
     for name, values in roi_processor.features.items():
-        np.save(save_dir / f"{name}.npy", values)
+        save_feature(roi_processor.root_dir, name, values)
     if manual_selection is not None:
-        np.save(save_dir / "manual_selection.npy", manual_selection)
+        save_manual_selection(roi_processor.root_dir, manual_selection)
 
     # Save selection indices
     np.save(save_dir / "selection.npy", idx_selection)
 
     # Save feature criteria
     for name, value in criteria.items():
-        np.save(save_dir / f"{name}_criteria.npy", value)
+        save_criteria(roi_processor.root_dir, name, value)
