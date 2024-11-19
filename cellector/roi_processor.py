@@ -46,7 +46,49 @@ class RoiProcessor:
     and reference images across multiple planes, providing functionality for feature
     calculation and analysis.
 
-    # TODO: Add attributes and methods to the class docstring.
+    Attributes
+    ----------
+    root_dir : Path
+        Path to the root directory where the data is stored.
+    lam : List[np.ndarray]
+        List of numpy arrays containing the pixen intensities for each ROI.
+    ypix : List[np.ndarray]
+        List of numpy arrays containing the y-pixel indices for each ROI.
+    xpix : List[np.ndarray]
+        List of numpy arrays containing the x-pixel indices for each ROI.
+    plane_idx : np.ndarray
+        1D numpy array containing the plane index to each ROI.
+    references : np.ndarray
+        3D numpy array containing reference images for each plane.
+    num_planes : int
+        Number of image planes.
+    lx, ly : int
+        Dimensions of each image plane.
+    num_rois : int
+        Total number of ROIs across all planes.
+    rois_per_plane : np.ndarray
+        Number of ROIs in each plane.
+    features : dict
+        Computed features for all ROIs.
+    feature_pipeline_methods : dict
+        Mapping of feature pipeline names to their corresponding methods.
+    feature_pipeline_dependencies : dict
+        Mapping of feature pipeline names to dependencies on attributes of roi_processor instances.
+    parameters : dict
+        Dictionary containing all the preprocessing parameters used.
+
+    Methods
+    -------
+    compute_features(use_saved=True)
+        Compute all registered features for each ROI
+    add_feature(name, values)
+        Add or update a feature
+    register_feature_pipeline(pipeline)
+        Register a new feature computation pipeline
+    update_parameters(**kwargs)
+        Update processing parameters
+    copy_with_params(params)
+        Create new instance with modified parameters
     """
 
     def __init__(
@@ -135,10 +177,10 @@ class RoiProcessor:
 
         # Store flattened mask data for some optimized implementations
         lam_flat, ypix_flat, xpix_flat, flat_roi_idx = utils.flatten_roi_data(self.lam, self.ypix, self.xpix)
-        self.lam_flat = lam_flat
-        self.ypix_flat = ypix_flat
-        self.xpix_flat = xpix_flat
-        self.flat_roi_idx = flat_roi_idx
+        self._lam_flat = lam_flat
+        self._ypix_flat = ypix_flat
+        self._xpix_flat = xpix_flat
+        self._flat_roi_idx = flat_roi_idx
 
         # Initialize feature and pipeline dictionary
         self.features = {}
@@ -347,10 +389,10 @@ class RoiProcessor:
         """
         if "centered_masks" not in self._cache:
             centered_masks = utils.get_centered_masks(
-                self.lam_flat,
-                self.ypix_flat,
-                self.xpix_flat,
-                self.flat_roi_idx,
+                self._lam_flat,
+                self._ypix_flat,
+                self._xpix_flat,
+                self._flat_roi_idx,
                 self.centroids,
                 width=self.parameters["centered_width"],
                 fill_value=self.parameters["fill_value"],
@@ -436,10 +478,10 @@ class RoiProcessor:
         """
         if "mask_volume" not in self._cache:
             mask_volume = utils.get_mask_volume(
-                self.lam_flat,
-                self.ypix_flat,
-                self.xpix_flat,
-                self.flat_roi_idx,
+                self._lam_flat,
+                self._ypix_flat,
+                self._xpix_flat,
+                self._flat_roi_idx,
                 self.num_rois,
                 (self.ly, self.lx),
             )
