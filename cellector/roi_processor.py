@@ -252,10 +252,25 @@ class RoiProcessor:
         """
         if len(values) != self.num_rois:
             raise ValueError(f"Length of feature values ({len(values)}) for feature {name} must match number of ROIs ({self.num_rois})")
-        self.features[name] = values
+        self.features[name] = values  # cache the feature values
+        io.save_feature(self.root_dir, name, values)  # save to disk
 
     def register_feature_pipeline(self, pipeline: FeaturePipeline):
-        """Register a feature pipeline with the RoiProcessor instance."""
+        """Register a feature pipeline with the RoiProcessor instance.
+
+        pipeline is a FeaturePipeline object that defines a method to compute a feature
+        based on the attributes of the RoiProcessor instance. The method should take the
+        RoiProcessor instance as an argument and return a numpy array of feature values.
+        The dependencies attribute of the pipeline object should be a list of strings
+        indicating the attributes of the RoiProcessor instance that the method depends on.
+        If any of these attributes are updated, the feature will be recomputed.
+
+        Parameters
+        ----------
+        pipeline : FeaturePipeline
+            FeaturePipeline object that defines a method to compute a feature based on the
+            attributes of the RoiProcessor instance.
+        """
         if not isinstance(pipeline, FeaturePipeline):
             raise TypeError("Pipeline must be an instance of FeaturePipeline")
         if pipeline.name in self.feature_pipeline_methods or pipeline.name in self.feature_pipeline_dependencies:
@@ -327,9 +342,9 @@ class RoiProcessor:
         RoiProcessor
             New instance of RoiProcessor with updated parameters.
         """
-        self_copy = deepcopy(self)
-        self_copy.update_parameters(**params)
-        return self_copy
+        copy_of_self = deepcopy(self)
+        copy_of_self.update_parameters(**params)
+        return copy_of_self
 
     @property
     def centroids(self):
@@ -487,34 +502,3 @@ class RoiProcessor:
             )
             self._cache["mask_volume"] = mask_volume
         return self._cache["mask_volume"]
-
-
-# TODO: Implement the equivalent of this function (probably compare other RedCell objects to one reference point)
-# def compareFeatureCutoffs(*vrexp, roundValue=None):
-#     features = [
-#         "parametersRedS2P.minMaxCutoff",
-#         "parametersRedDotProduct.minMaxCutoff",
-#         "parametersRedPearson.minMaxCutoff",
-#         "parametersRedPhaseCorrelation.minMaxCutoff",
-#     ]
-#     dfDict = {"session": [ses.sessionPrint() for ses in vrexp]}
-
-#     def getFeatName(name):
-#         cname = name[name.find("Red") + 3 : name.find(".")]
-#         return cname  # cname+'_min', cname+'_max'
-
-#     for feat in features:
-#         dfDict[getFeatName(feat)] = [None] * len(vrexp)
-
-#     for idx, ses in enumerate(vrexp):
-#         for feat in features:
-#             cdata = ses.loadone(feat)
-#             if cdata.dtype == object and cdata.item() is None:
-#                 cdata = [None, None]
-#             else:
-#                 if roundValue is not None:
-#                     cdata = np.round(cdata, roundValue)
-#             dfDict[getFeatName(feat)][idx] = cdata
-
-#     print(pd.DataFrame(dfDict))
-#     return None
