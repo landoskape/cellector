@@ -1,14 +1,13 @@
-from typing import List, Union, Dict, Optional
-from copy import copy
+from typing import List, Union, Dict, Optional, Tuple
 from pathlib import Path
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 import numpy as np
-from .utils import transpose, get_s2p_data, get_s2p_redcell, cat_planes
+from .utils import transpose, cat_planes
 from .roi_processor import RoiProcessor
 
 
-def _get_pixel_data_single(mask: np.ndarray):
+def _get_pixel_data_single(mask: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Get pixel data from a single mask.
 
     Extracts the intensity values, y-coordinates, and x-coordinates from a single mask
@@ -48,11 +47,86 @@ def get_pixel_data(mask_volume, verbose: bool = True):
     stats : list of dict
         List of dictionaries with keys "lam", "ypix", and "xpix" for each ROI.
     """
-    iterable = tqdm(mask_volume, desc="Extracting mask data", leave=False) if verbose else mask_volume
-    with Pool(max(2, cpu_count() - 2)) as pool:
-        results = pool.map(_get_pixel_data_single, iterable)
+    n_workers = max(2, cpu_count() - 2)
+    try:
+        with Pool(n_workers) as pool:
+            iterable = tqdm(mask_volume, desc="Extracting mask data", leave=False) if verbose else mask_volume
+            results = list(pool.imap(_get_pixel_data_single, iterable))
+
+    except Exception as e:
+        if "pool" in locals():
+            pool.terminate()
+            pool.join()
+        raise e from None
+
     lam, ypix, xpix = transpose(results)
-    return [dict(lam=l, ypix=y, xpix=x) for l, y, x in zip(lam, ypix, xpix)]
+    stats = [dict(lam=l, ypix=y, xpix=x) for l, y, x in zip(lam, ypix, xpix)]
+    return stats
+
+
+def get_s2p_data(s2p_folders: List[Path], reference_key: str = "meanImg_chan2"):
+    """Get list of stats and chan2 reference images from all planes in a suite2p directory.
+
+    suite2p saves the statistics and reference images for each plane in separate
+    directories. This function reads the statistics and reference images for each plane
+    and returns them as lists.
+
+    Parameters
+    ----------
+    s2p_folders : list of Path
+        List of directories that contain the suite2p output for each plane (stat.npy and ops.npy).
+    reference_key : str, optional
+        Key to use for the reference image. Default is "meanImg_chan2".
+
+    Returns
+    -------
+    stats : list of list of dictionaries
+        Each element of stats is a list of dictionaries containing ROI statistics for each plane.
+    references : list of np.ndarrays
+        Each element of references is an image (usually of average red fluorescence) for each plane.
+    """
+    stats = []
+    references = []
+    for folder in s2p_folders:
+        stats.append(np.load(folder / "stat.npy", allow_pickle=True))
+        ops = np.load(folder / "ops.npy", allow_pickle=True).item()
+        if reference_key not in ops:
+            raise ValueError(f"Reference key ({reference_key}) not found in ops.npy file ({folder / 'ops.npy'})!")
+        references.append(ops[reference_key])
+    if not all(ref.shape == references[0].shape for ref in references):
+        raise ValueError("Reference images must have the same shape as each other!")
+    if not all(ref.ndim == 2 for ref in references):
+        raise ValueError("Reference images must be 2D arrays!")
+    return stats, references
+
+
+def get_s2p_redcell(s2p_folders: List[Path]):
+    """Get red cell probability masks from all planes in a suite2p directory.
+
+    Extracts the red cell probability masks from each plane in a suite2p directory
+    and returns them as a list of numpy arrays. The red cell probability masks are
+    saved in the "redcell.npy" file in each plane directory in which the first column
+    is a red cell assigment and the second column is the probability of each ROI being
+    a red cell.
+
+    Parameters
+    ----------
+    s2p_folders : list of Path
+        List of directories that contain the suite2p output for each plane (redcell.npy).
+
+    Returns
+    -------
+    redcell : list of np.ndarrays
+        List of red cell probabilities for each plane. Each array has length N corresponding
+        to the number of ROIs in that plane.
+    """
+    redcell = []
+    for folder in s2p_folders:
+        if not (folder / "redcell.npy").exists():
+            raise FileNotFoundError(f"Could not find redcell.npy file in {folder}!")
+        c_redcell = np.load(folder / "redcell.npy")
+        redcell.append(c_redcell[:, 1])
+    return redcell
 
 
 class Suite2pLoader:
@@ -68,10 +142,8 @@ class Suite2pLoader:
         self.rois_per_plane = [len(stat) for stat in self.stats]
 
         # Get redcell data if it exists
-        if use_redcell and all((folder / "redcell.npy").exists() for folder in self.folders):
+        if use_redcell:
             self.redcell = get_s2p_redcell(self.folders)
-        else:
-            raise FileNotFoundError(f"Could not find redcell.npy files in all folders {self.s2p_dir}!")
 
     def get_s2p_folders(self):
         """Get list of directories for each plane in a suite2p directory.
@@ -188,9 +260,9 @@ def create_from_mask_volume(
     roi_processor : RoiProcessor
         RoiProcessor object with roi masks and reference data loaded.
     """
-    stats = get_pixel_data(mask_volume)
     if clear_existing:
         clear_cellector_files(root_dir)
+    stats = get_pixel_data(mask_volume)
     return RoiProcessor(root_dir, stats, references, plane_idx, extra_features=extra_features, autocompute=autocompute)
 
 

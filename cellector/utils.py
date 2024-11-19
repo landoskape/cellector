@@ -1,5 +1,4 @@
-from typing import List, Tuple, Optional, Sequence, Union
-from pathlib import Path
+from typing import List, Tuple, Optional, Sequence
 import numpy as np
 import numba as nb
 from scipy.ndimage import binary_dilation, generate_binary_structure
@@ -61,71 +60,6 @@ def transpose(sequence: Sequence) -> List:
     [(0, 1, 2), (0, 1, 4)]
     """
     return map(list, zip(*sequence))
-
-
-def get_s2p_data(s2p_folders: List[Path], reference_key: str = "meanImg_chan2"):
-    """Get list of stats and chan2 reference images from all planes in a suite2p directory.
-
-    suite2p saves the statistics and reference images for each plane in separate
-    directories. This function reads the statistics and reference images for each plane
-    and returns them as lists.
-
-    Parameters
-    ----------
-    s2p_folders : list of Path
-        List of directories that contain the suite2p output for each plane (stat.npy and ops.npy).
-    reference_key : str, optional
-        Key to use for the reference image. Default is "meanImg_chan2".
-
-    Returns
-    -------
-    stats : list of list of dictionaries
-        Each element of stats is a list of dictionaries containing ROI statistics for each plane.
-    references : list of np.ndarrays
-        Each element of references is an image (usually of average red fluorescence) for each plane.
-    """
-    stats = []
-    references = []
-    for folder in s2p_folders:
-        stats.append(np.load(folder / "stat.npy", allow_pickle=True))
-        ops = np.load(folder / "ops.npy", allow_pickle=True).item()
-        if reference_key not in ops:
-            raise ValueError(f"Reference key ({reference_key}) not found in ops.npy file ({folder / 'ops.npy'})!")
-        references.append(ops[reference_key])
-    if not all(ref.shape == references[0].shape for ref in references):
-        raise ValueError("Reference images must have the same shape as each other!")
-    if not all(ref.ndim == 2 for ref in references):
-        raise ValueError("Reference images must be 2D arrays!")
-    return stats, references
-
-
-def get_s2p_redcell(s2p_folders: List[Path]):
-    """Get red cell probability masks from all planes in a suite2p directory.
-
-    Extracts the red cell probability masks from each plane in a suite2p directory
-    and returns them as a list of numpy arrays. The red cell probability masks are
-    saved in the "redcell.npy" file in each plane directory in which the first column
-    is a red cell assigment and the second column is the probability of each ROI being
-    a red cell.
-
-    Parameters
-    ----------
-    s2p_folders : list of Path
-        List of directories that contain the suite2p output for each plane (redcell.npy).
-
-    Returns
-    -------
-    redcell : list of np.ndarrays
-        List of red cell probabilities for each plane. Each array has length N corresponding
-        to the number of ROIs in that plane.
-    """
-    redcell = []
-    for folder in s2p_folders:
-        if not (folder / "redcell.npy").exists():
-            raise FileNotFoundError(f"Could not find redcell.npy file in {folder}!")
-        c_redcell = np.load(folder / "redcell.npy")
-        redcell.append(c_redcell[:, 1])
-    return redcell
 
 
 def get_roi_data(stat: List[dict]):
