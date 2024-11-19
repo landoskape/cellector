@@ -1,47 +1,37 @@
-# red-cell-selector
- A pipeline and GUI for determining which ROIs are red
+# cellector
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-# Filtering
-There's a lot of filtering that happens. I think it would be useful to build a central
-filtering library with the typical options and easily extendable filtering methods, but 
-you know this could be more trouble than it's worth. I guess the idea is as follows:
-1. Build a filtering library that is informed by a dictionary what to do. For example, the
-dict might look like this:
-```python
-instructions = dict(
-    name="window",
-    method="hanning",
-)
+A pipeline and GUI for determining which ROIs match features in a fluorescence image. It
+is a common challenge in biology to determine whether a particular ROI (i.e. a collection
+of weighted pixels representing an inferred structure in an image) overlaps with features
+of a fluorescence image co-registered to the ROI. For example, in neuroscience, we might
+use [suite2p](https://github.com/MouseLand/suite2p) to extract ROIs indicating active
+cells using a functional fluorophore like GCaMP, but want to know if the cells associated
+with those ROIs contain a secondary fluorophore like tdTomato. This package helps you do
+just that!
+
+The package itself is somewhat simple, but we spent lots of time thinking about how to do
+this in the most reliable way. The standard pipeline computes a set of standard features
+for each ROI in comparison to a reference image which are useful for determining whether
+an ROI maps onto fluorescence. We provide a GUI for viewing the ROIs, the reference
+images, a distribution of feature values for each ROI, and an interactive system for
+deciding where to draw cutoffs on each feature to choose the ROIs that contain
+fluorescence. There's also a system for manual annotation if the automated system doesn't
+quite get it all right. 
+
+## Installation
+```bash
+pip install cellector
 ```
-Which contains the name (window) and the method (hanning) and that's all that's needed to 
-window an image. Then, if a new method is added, the string could change but the calling
-function would stay the same (``filter(image, **instructions)``). 
-2. Clearly identify what the "standard" filtering operations are for each feature pipeline, 
-and maybe even include ways for the user to study different filtering options in a GUI? 
 
-### Filtering Use in Original Module
-1. Correlation coefficient:
- - butterworthbpf filter on reference stack before centering: width=20, lowcut=12, highcut=250, order=3, fs=512
- - nan fill (outside the width on masks and reference)
-2. Dot Product:
- - butterworthbpf filter on reference stack: lowcut=12, highcut=250, order=3, fs=512
-3. Phase Correlation
- - no filtering, width=40, eps=1e6, winFunc=hamming
- - window on both reference and masks
+## Usage and Tutorial
 
-# Hyperparameter Choices:
-So far the only hyperparameters I'm aware of are filtering parameters, and the eps value for
-phase correlation measurements (which is weirdly high...?). I think it would be good to do 
-some hyperparameter optimization for these, which a user could manually supervise themselves
-with some labelling. For example, the user could open a GUI that compares masks with reference
-images for some sample "true" data and in addition for any data they've loaded in. The GUI might
-look something like follows:
-1. For a particular set of hyperparameters (filtering, for example), the user could get a histogram
-of feature values for all the features for all the masks. They could use cutoff lines to pick a range
-of feature values for that particular set of hyperparameters, and then scroll through mask matches
-that come from within that range. This way, they could determine how the hyperparameters affect the
-feature values at each part of the distribution and select hyperparameters that give good separation.
+## Contributing
+Feel free to contribute to this project by opening issues or submitting pull
+requests. It's already a collaborative project, so more minds are great if you
+have ideas or anything to contribute!
 
-# GUI
-ToDo: study the GUI code to figure out what needs to be processed / what needs to be quickly
-accessible, etc etc
+## License & Citations
+This project is licensed under the GNU License. If you use this repository as part of a
+publication, please cite us. There's no paper associated with the code at the moment, but
+you can cite our GitHub repository URL or email us for any updates about this issue.
