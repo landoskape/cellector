@@ -78,8 +78,14 @@ class SelectionGUI:
 
         # process initial plane
         self.idx_meets_criteria = np.full(self.roi_processor.num_rois, True)
-        self.manual_label = np.full(self.roi_processor.num_rois, False)
-        self.manual_label_active = np.full(self.roi_processor.num_rois, False)
+
+        if io.is_manual_selection_saved(self.roi_processor.root_dir):
+            manual_selection = io.load_manual_selection(self.roi_processor.root_dir)
+            self.manual_label = manual_selection[:, 0]
+            self.manual_label_active = manual_selection[:, 1]
+        else:
+            self.manual_label = np.full(self.roi_processor.num_rois, False)
+            self.manual_label_active = np.full(self.roi_processor.num_rois, False)
 
         # open napari viewer and associated GUI features
         self.show_control_cells = False  # show control cells instead of target cells
