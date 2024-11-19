@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import QGraphicsProxyWidget, QPushButton
 
 from .roi_processor import RoiProcessor
 from . import utils
-from .io import save_selection
+from . import io
 
 basic_button_style = """
 QWidget {
@@ -65,7 +65,7 @@ class SelectionGUI:
         The number of bins to use for the histograms of the intensity features. Default is 50.
     """
 
-    def __init__(self, roi_processor, num_bins=50):
+    def __init__(self, roi_processor: RoiProcessor, num_bins=50):
         if not isinstance(roi_processor, RoiProcessor):
             raise ValueError("roi_processor must be an instance of the RoiProcessor class.")
 
@@ -227,18 +227,16 @@ class SelectionGUI:
 
             # Try loading feature cutoffs
             load_successful = False
-            if all((folder / "cellector" / f"{feature}_criteria.npy").exists() for folder in self.roi_processor.save_folders):
-                cutoffs = [np.load(folder / "cellector" / f"{feature}_criteria.npy", allow_pickle=True) for folder in self.roi_processor.save_folders]
-                if all(c[0] == cutoffs[0][0] and c[1] == cutoffs[0][1] for c in cutoffs):
-                    use_cutoffs = cutoffs[0]
-                    if use_cutoffs[0] is None:
-                        use_cutoffs[0] = self.feature_range[feature][0]
-                        self.feature_active[feature][0] = False
-                    if use_cutoffs[1] is None:
-                        use_cutoffs[1] = self.feature_range[feature][1]
-                        self.feature_active[feature][1] = False
-                    self.feature_cutoffs[feature] = use_cutoffs
-                    load_successful = True
+            if io.is_criteria_saved(self.roi_processor.root_dir, feature):
+                cutoffs = io.load_saved_criteria(self.roi_processor.root_dir, feature)
+                if cutoffs[0] is None:
+                    cutoffs[0] = self.feature_range[feature][0]
+                    self.feature_active[feature][0] = False
+                if cutoffs[1] is None:
+                    cutoffs[1] = self.feature_range[feature][1]
+                    self.feature_active[feature][1] = False
+                self.feature_cutoffs[feature] = cutoffs
+                load_successful = True
             if not load_successful:
                 # if loading fails, then set the cutoffs to the full range
                 self.feature_cutoffs[feature] = copy(self.feature_range[feature])
@@ -571,7 +569,14 @@ class SelectionGUI:
     def save_selection(self):
         """Save the current selection of cells to files."""
         manual_selection = np.stack((self.manual_label, self.manual_label_active)).T
-        save_selection(self.roi_processor, self.idx_selected, self.feature_cutoffs, self.feature_active, manual_selection)
+        feature_criteria = {}
+        for feature in self.roi_processor.features:
+            feature_criteria[feature] = self.feature_cutoffs[feature]
+            if not self.feature_active[feature][0]:
+                feature_criteria[feature][0] = None
+            if not self.feature_active[feature][1]:
+                feature_criteria[feature][1] = None
+        io.save_selection(self.roi_processor, self.idx_selected, feature_criteria, manual_selection=manual_selection)
         self.update_text("Selection saved!")
 
     # ------------------------------

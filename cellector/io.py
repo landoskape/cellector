@@ -1,4 +1,4 @@
-from typing import Union, Dict
+from typing import Union, Dict, Optional
 from copy import copy
 from pathlib import Path
 from multiprocessing import Pool, cpu_count
@@ -133,38 +133,133 @@ def create_from_suite2p(
     Returns
     -------
     roi_processor : RoiProcessor
-        RoiProcessor object with suite2p data loaded.
+        RoiProcessor object with suite2p data loaded that uses the suite2p_dir as the root directory.
     """
     s2p_data = Suite2pLoader(suite2p_dir, use_redcell=use_redcell)
     if s2p_data.redcell is not None:
         extra_features["red_s2p"] = s2p_data.redcell
 
     if clear_existing:
-        for folder in s2p_data.folders:
-            save_dir = folder / "cellector"
-            if save_dir.exists():
-                for file in save_dir.glob("*"):
-                    file.unlink()
-            # remove save_dir
-            save_dir.rmdir()
+        clear_cellector_files(suite2p_dir)
 
     # Initialize roi_processor object with suite2p data
-    return RoiProcessor(s2p_data.stats, s2p_data.references, s2p_data.folders, extra_features=extra_features, autocompute=autocompute)
+    return RoiProcessor(s2p_data.stats, s2p_data.references, suite2p_dir, extra_features=extra_features, autocompute=autocompute)
+
+
+def get_save_directory(root_dir: Union[Path, str]):
+    """Get the cellector save directory from a root folder.
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory.
+
+    Returns
+    -------
+    save_dir : Path
+        Path to the save directory for the root directory.
+    """
+    return Path(root_dir) / "cellector"
+
+
+def clear_cellector_files(root_dir: Union[Path, str]):
+    """Clear all files in the cellector save directory for a root directory.
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory.
+    """
+    save_dir = get_save_directory(root_dir)
+    if save_dir.exists():
+        for file in save_dir.glob("*"):
+            file.unlink()
+        save_dir.rmdir()
+
+
+def load_saved_feature(root_dir: Union[Path, str], name: str):
+    """Load a feature from disk.
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory.
+    name : str
+        Name of the feature to load.
+
+    Returns
+    -------
+    feature : np.ndarray
+        Feature data loaded from disk.
+    """
+    save_dir = get_save_directory(root_dir)
+    return np.load(save_dir / f"{name}.npy")
+
+
+def is_feature_saved(root_dir: Union[Path, str], name: str):
+    """Check if a feature exists on disk.
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory.
+    name : str
+        Name of the feature to check.
+
+    Returns
+    -------
+    exists : bool
+        Whether the feature exists on disk.
+    """
+    save_dir = get_save_directory(root_dir)
+    return (save_dir / f"{name}.npy").exists()
+
+
+def load_saved_criteria(root_dir: Union[Path, str], name: str):
+    """Load a feature criterion from disk.
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory.
+    name : str
+        Name of the feature criterion to load.
+
+    Returns
+    -------
+    criterion : np.ndarray
+        Criterion data loaded from disk.
+    """
+    save_dir = get_save_directory(root_dir)
+    return np.load(save_dir / f"{name}_criteria.npy", allow_pickle=True)
+
+
+def is_criteria_saved(root_dir: Union[Path, str], name: str):
+    """Check if a feature criterion exists on disk.
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory.
+    name : str
+        Name of the feature criterion to check.
+
+    Returns
+    -------
+    exists : bool
+        Whether the feature criterion exists on disk.
+    """
+    save_dir = get_save_directory(root_dir)
+    return (save_dir / f"{name}_criteria.npy").exists()
 
 
 def save_selection(
     roi_processor: RoiProcessor,
     idx_selection: np.ndarray,
     criteria: Dict[str, list],
-    use_criteria: Dict[str, list],
-    manual_selection: np.ndarray,
+    manual_selection: Optional[np.ndarray] = None,
 ):
-    """Save features, feature criteria, and manual labels to target folders.
-
-    Saves the selection indices, feature values, feature criteria, and manual selection labels to the target folders
-    defined in the roi_processor object. The feature values are saved as .npy files with the feature name as the filename.
-    The feature criteria are saved as .npy files with the feature name and "_criteria" appended to the filename.
-    The manual selection labels are saved as "manual_selection.npy".
+    """Save roi processor features, criterion, and selection to disk.
 
     Parameters
     ----------
@@ -175,10 +270,8 @@ def save_selection(
         whether the ROI is selected my meeting all feature criteria.
     criteria : Dict[str, list]
         Dictionary of feature criteria for each feature. Each value in the dictionary should be a 2 element list containing
-        the minimum and maximum values for the feature.
-    use_criteria: Dict[str, list]
-        Dictionary of whether to use the feature criteria for each feature. Each value in the dictionary should be a 2 element
-        list containing booleans indicating whether to use the minimum and maximum values for the feature.
+        the minimum and maximum values for the feature. If the minimum or maximum cutoff is ignored, then that value should
+        be set to None.
     manual_selection : np.ndarray
         Manual selection labels for each ROI. Shape should be (num_rois, 2), where the first column is the manual label
         and the second column is whether or not to use a manual label for that cell.
@@ -186,8 +279,9 @@ def save_selection(
     # Check that everything has the expected shapes
     if idx_selection.shape[0] != roi_processor.num_rois:
         raise ValueError(f"Selection indices have shape {idx_selection.shape} but expected {roi_processor.num_rois}!")
-    if (manual_selection.shape[0] != roi_processor.num_rois) or (manual_selection.shape[1] != 2):
-        raise ValueError(f"Manual selection labels have shape {manual_selection.shape} but expected ({roi_processor.num_rois}, 2)!")
+    if manual_selection is not None:
+        if (manual_selection.shape[0] != roi_processor.num_rois) or (manual_selection.shape[1] != 2):
+            raise ValueError(f"Manual selection labels have shape {manual_selection.shape} but expected ({roi_processor.num_rois}, 2)!")
     for name, value in criteria.items():
         if name not in roi_processor.features:
             raise ValueError(f"Feature {name} not found in roi_processor features!")
@@ -196,48 +290,19 @@ def save_selection(
     if any(feature not in criteria for feature in roi_processor.features):
         raise ValueError(f"Feature criteria missing for features: {set(roi_processor.features) - set(criteria)}!")
 
-    # Make folders for each plane
-    for folder in roi_processor.save_folders:
-        save_dir = folder / "cellector"
-        save_dir.mkdir(exist_ok=True)
+    # Load and create save directory
+    save_dir = get_save_directory(roi_processor.root_dir)
+    save_dir.mkdir(exist_ok=True)
 
     # Save features values for each plane
-    features_by_plane = {name: split_planes(value, roi_processor.rois_per_plane) for name, value in roi_processor.features.items()}
-    manual_selection_by_plane = split_planes(manual_selection, roi_processor.rois_per_plane)
-    for name, values in features_by_plane.items():
-        for iplane, folder in enumerate(roi_processor.save_folders):
-            np.save(folder / "cellector" / f"{name}.npy", values[iplane])
-    for iplane, folder in enumerate(roi_processor.save_folders):
-        np.save(folder / "cellector" / "manual_selection.npy", manual_selection_by_plane[iplane])
+    for name, values in roi_processor.features.items():
+        np.save(save_dir / f"{name}.npy", values)
+    if manual_selection is not None:
+        np.save(save_dir / "manual_selection.npy", manual_selection)
 
     # Save selection indices
-    idx_selection_by_plane = split_planes(idx_selection, roi_processor.rois_per_plane)
-    for iplane, folder in enumerate(roi_processor.save_folders):
-        np.save(folder / "cellector" / "selection.npy", idx_selection_by_plane[iplane])
+    np.save(save_dir / "selection.npy", idx_selection)
 
     # Save feature criteria
     for name, value in criteria.items():
-        print(name, value, type(value))
-        save_criteria = copy(value)
-        if not use_criteria[name][0]:
-            save_criteria[0] = None
-        if not use_criteria[name][1]:
-            save_criteria[1] = None
-        print(save_criteria, use_criteria[name])
-        for iplane, folder in enumerate(roi_processor.save_folders):
-            np.save(folder / "cellector" / f"{name}_criteria.npy", save_criteria)
-
-
-# fullRedIdx = np.concatenate(self.redIdx)
-# fullManualLabels = np.stack((np.concatenate(self.manualLabel), np.concatenate(self.manualLabelActive)))
-# self.redCell.saveone(fullRedIdx, "mpciROIs.redCellIdx")
-# self.redCell.saveone(fullManualLabels, "mpciROIs.redCellManualAssignments")
-# for idx, name in enumerate(self.roi_processor.features):
-#     cFeatureCutoffs = self.featureCutoffs[idx]
-#     if not (self.feature_active[idx][0]):
-#         cFeatureCutoffs[0] = np.nan
-#     if not (self.feature_active[idx][1]):
-#         cFeatureCutoffs[1] = np.nan
-#     self.redCell.saveone(self.featureCutoffs[idx], self.redCell.oneNameFeatureCutoffs(name))
-
-# print(f"Red Cell curation choices are saved for session {self.redCell.sessionPrint()}")
+        np.save(save_dir / f"{name}_criteria.npy", value)
