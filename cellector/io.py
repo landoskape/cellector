@@ -1,5 +1,6 @@
 from typing import List, Union, Dict, Optional, Tuple
 from pathlib import Path
+import shutil
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 import numpy as np
@@ -333,6 +334,45 @@ def clear_cellector_files(root_dir: Union[Path, str]):
         for file in save_dir.glob("*"):
             file.unlink()
         save_dir.rmdir()
+
+
+def propagate_criteria(root_dir: Union[Path, str], *target_dirs: Union[Path, str]):
+    """Copy feature criteria saved under root_dir to other directories.
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory where the feature criteria are saved.
+    target_dirs : list of Path or str
+        List of directories to copy the feature criteria to.
+
+    Returns
+    -------
+    successful_copies : dict
+        Dictionary of successful copies with the target directory as the key and a list of copied files as the value.
+    unsuccessful_copies : dict
+        Dictionary of unsuccessful copies with the target directory as the key and the error as the value.
+    """
+    if not target_dirs:
+        raise ValueError("No directories to copy feature criteria to!")
+
+    save_dir = get_save_directory(root_dir)
+    copy_dirs = [get_save_directory(target_dir) for target_dir in target_dirs]
+    successful_copies = {}
+    unsuccessful_copies = {}
+    for copy_dir in copy_dirs:
+        copy_dir.mkdir(exist_ok=True)
+        successful_copies[copy_dir] = []
+        try:
+            for file in save_dir.glob("*_criteria.npy"):
+                shutil.copy(file, copy_dir / file.name)
+                successful_copies[copy_dir].append(file.name)
+        except Exception as e:
+            # remove incomplete files from failed copy
+            for file in successful_copies[copy_dir]:
+                (copy_dir / file).unlink()
+            unsuccessful_copies[copy_dir] = e
+    return successful_copies, unsuccessful_copies
 
 
 def save_feature(root_dir: Union[Path, str], name: str, feature: np.ndarray):
