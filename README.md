@@ -60,6 +60,27 @@ gui = SelectionGUI(roi_processor)
 
 Then, use the GUI and hit save! Instructions for the GUI are coming. 
 
+## Features in Progress
+#### Hyperparameter Choices
+There are a few "hyperparameters" to the package, including filtering parameters, the eps
+value for phase correlation, and size parameters for centered stacks. We need to enable 
+hyperparameter optimization for these, which a user can supervise themselves. Idea:
+The user could open a GUI that compares masks with reference images for some sample
+"true" data and in addition for any data they've loaded in. One idea:
+For a particular set of hyperparameters (filtering, for example), the user could get a
+histogram of feature values for all the features for all the masks. They could use cutoff
+lines to pick a range of feature values for that particular set of hyperparameters, and
+then scroll through mask matches that come from within that range. This way, they could
+determine how the hyperparameters affect the feature values at each part of the
+distribution and select hyperparameters that give good separation.
+In addition, there could be some automated tuning, for example, to pick the eps a user
+could just input the maximum size ROI, and then measuring the average power for higher
+spatial frequencies.
+
+#### Visualization of algorithm and filtering steps etc
+To help choose hyperparameters and see how it's working, I'm going to build some tools to
+visualize masks and the reference image under different conditions. 
+
 ## Contributing
 Feel free to contribute to this project by opening issues or submitting pull
 requests. It's already a collaborative project, so more minds are great if you
