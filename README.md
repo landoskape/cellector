@@ -38,6 +38,11 @@ The basic workflow of this package is as follows:
 3. Save the data.
 4. Repeat (or use scripting to speed up).
 
+If you want to see the basic workflow in a notebook, look [here](./notebooks/tutorial.ipynb).
+Otherwise, read the instructions below or look at the [documentation](./docs/examples.md)
+which is very far from complete at the moment. 
+
+#### Basic instructions
 We've provided a few functions to make ``RoiProcessor`` objects that work differently
 depending on what kind of data you are starting with. For an exhaustive list, go
 [here](./docs/examples.md). If you are working directly on the output of suite2p, use:
