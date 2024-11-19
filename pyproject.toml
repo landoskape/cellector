@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cellector"
+version = "0.1.0"
+authors = [
+    { name = "Andrew T. Landau" },
+]
+description = "A pipeline and GUI for determining which ROIs match features in a fluorescence image."
+readme = { file = "README.md", content-type = "text/markdown" } 
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU License",
+    "Operating System :: OS Independent",
+]
+keywords = ["cell", "fluorescence", "image", "ROI", "feature", "matching", "pipeline", "GUI"]
+dependencies = [
+    "numpy>1.24",
+    "matplotlib",
+    "numba",
+    "scipy",
+    "tqdm",
+    "PyQt5",
+    "pyqtgraph",
+    "napari[all]",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/landoskape/cellector"
+"Bug Tracker" = "https://github.com/landoskape/cellector/issues"
