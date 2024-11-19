@@ -11,11 +11,6 @@ authors = [
 description = "A pipeline and GUI for determining which ROIs match features in a fluorescence image."
 readme = { file = "README.md", content-type = "text/markdown" } 
 requires-python = ">=3.9"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: GNU License",
-    "Operating System :: OS Independent",
-]
 keywords = ["cell", "fluorescence", "image", "ROI", "feature", "matching", "pipeline", "GUI"]
 dependencies = [
     "numpy>1.24",
