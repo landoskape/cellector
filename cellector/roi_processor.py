@@ -52,7 +52,7 @@ class RoiProcessor:
     def __init__(
         self,
         root_dir: Union[Path, str],
-        stats: List[Dict],
+        stats: Union[List[Dict], np.ndarray[Dict]],
         references: np.ndarray,
         plane_idx: np.ndarray,
         extra_features: Optional[Dict[str, List[np.ndarray]]] = None,
@@ -64,8 +64,8 @@ class RoiProcessor:
 
         Parameters
         ----------
-        stats: List[dict]
-            List of dictionaries containing ROI statistics for each mask.
+        stats: List[Dict] or np.ndarray[Dict]
+            List or numpy array of dictionaries containing ROI statistics for each mask.
             required keys: 'lam', 'xpix', 'ypix', which are lists of numbers corresponding to
             the weight of each pixel, and the x and y indices of each pixel in the mask
         references : np.ndarray
@@ -92,8 +92,8 @@ class RoiProcessor:
             Additional parameters to update the default parameters used for preprocessing.
         """
         # Validate input data
-        if not isinstance(stats, list) or not all(isinstance(stat, dict) for stat in stats):
-            raise TypeError("Stats must be a list of dictionaries.")
+        if not (isinstance(stats, list) or isinstance(stats, np.ndarray)) or not all(isinstance(stat, dict) for stat in stats):
+            raise TypeError("Stats must be a list or numpy array of dictionaries.")
         for stat in stats:
             if not all(key in stat for key in ["lam", "xpix", "ypix"]):
                 raise ValueError("Each stat dictionary must contain keys 'lam', 'xpix', and 'ypix'")
