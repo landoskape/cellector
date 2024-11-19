@@ -58,7 +58,7 @@ from cellector.gui import SelectionGUI
 gui = SelectionGUI(roi_processor)
 ```
 
-Then, use the GUI and hit save! Instructions for the GUI are coming. 
+Then, use the GUI and hit save! Instructions for the GUI are [here](./docs/gui.md).
 
 ## Features in Progress
 #### Hyperparameter Choices
