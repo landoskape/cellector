@@ -338,7 +338,6 @@ class SelectionGUI:
         self.viewer.bind_key("r", self._update_reference_visibility, overwrite=True)
         self.viewer.bind_key("c", self._next_color_state, overwrite=True)
         self.viewer.bind_key("a", self._next_colormap, overwrite=True)
-        self.viewer.bind_key("Control-c", self.save_selection, overwrite=False)
 
         self.labels.mouse_drag_callbacks.append(self._single_click_label)
         self.masks.mouse_drag_callbacks.append(self._single_click_label)
