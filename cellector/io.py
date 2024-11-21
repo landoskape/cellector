@@ -395,6 +395,24 @@ def propagate_criteria(root_dir: Union[Path, str], *target_dirs: Union[Path, str
     return successful_copies, unsuccessful_copies
 
 
+def feature_path(save_dir: Union[Path, str], name: str):
+    """Get the path to a feature file.
+
+    Parameters
+    ----------
+    save_dir : Path or str
+        Path to the save directory.
+    name : str
+        Name of the feature.
+
+    Returns
+    -------
+    path : Path
+        Path to the feature file.
+    """
+    return save_dir / f"{name}.npy"
+
+
 def save_feature(root_dir: Union[Path, str], name: str, feature: np.ndarray):
     """Save a feature to disk.
 
@@ -409,7 +427,7 @@ def save_feature(root_dir: Union[Path, str], name: str, feature: np.ndarray):
     """
     save_dir = get_save_directory(root_dir)
     save_dir.mkdir(exist_ok=True)
-    np.save(save_dir / f"{name}.npy", feature)
+    np.save(feature_path(save_dir, name), feature)
 
 
 def load_saved_feature(root_dir: Union[Path, str], name: str):
@@ -428,7 +446,7 @@ def load_saved_feature(root_dir: Union[Path, str], name: str):
         Feature data loaded from disk.
     """
     save_dir = get_save_directory(root_dir)
-    return np.load(save_dir / f"{name}.npy")
+    return np.load(feature_path(save_dir, name))
 
 
 def is_feature_saved(root_dir: Union[Path, str], name: str):
@@ -447,7 +465,25 @@ def is_feature_saved(root_dir: Union[Path, str], name: str):
         Whether the feature exists on disk.
     """
     save_dir = get_save_directory(root_dir)
-    return (save_dir / f"{name}.npy").exists()
+    return feature_path(save_dir, name).exists()
+
+
+def criteria_path(save_dir: Union[Path, str], name: str):
+    """Get the path to a feature criterion file.
+
+    Parameters
+    ----------
+    save_dir : Path or str
+        Path to the save directory.
+    name : str
+        Name of the feature criterion.
+
+    Returns
+    -------
+    path : Path
+        Path to the feature criterion file.
+    """
+    return save_dir / f"{name}_criteria.npy"
 
 
 def save_criteria(root_dir: Union[Path, str], name: str, criteria: np.ndarray):
@@ -464,7 +500,7 @@ def save_criteria(root_dir: Union[Path, str], name: str, criteria: np.ndarray):
     """
     save_dir = get_save_directory(root_dir)
     save_dir.mkdir(exist_ok=True)
-    np.save(save_dir / f"{name}_criteria.npy", criteria)
+    np.save(criteria_path(save_dir, name), criteria)
 
 
 def load_saved_criteria(root_dir: Union[Path, str], name: str):
@@ -483,7 +519,7 @@ def load_saved_criteria(root_dir: Union[Path, str], name: str):
         Criterion data loaded from disk.
     """
     save_dir = get_save_directory(root_dir)
-    return np.load(save_dir / f"{name}_criteria.npy", allow_pickle=True)
+    return np.load(criteria_path(save_dir, name), allow_pickle=True)
 
 
 def is_criteria_saved(root_dir: Union[Path, str], name: str):
@@ -502,7 +538,23 @@ def is_criteria_saved(root_dir: Union[Path, str], name: str):
         Whether the feature criterion exists on disk.
     """
     save_dir = get_save_directory(root_dir)
-    return (save_dir / f"{name}_criteria.npy").exists()
+    return criteria_path(save_dir, name).exists()
+
+
+def manual_selection_path(save_dir: Union[Path, str]):
+    """Get the path to the manual selection labels file.
+
+    Parameters
+    ----------
+    save_dir : Path or str
+        Path to the save directory.
+
+    Returns
+    -------
+    path : Path
+        Path to the manual selection labels file.
+    """
+    return save_dir / "manual_selection.npy"
 
 
 def save_manual_selection(root_dir: Union[Path, str], manual_selection: np.ndarray):
@@ -517,7 +569,7 @@ def save_manual_selection(root_dir: Union[Path, str], manual_selection: np.ndarr
     """
     save_dir = get_save_directory(root_dir)
     save_dir.mkdir(exist_ok=True)
-    np.save(save_dir / "manual_selection.npy", manual_selection)
+    np.save(manual_selection_path(save_dir), manual_selection)
 
 
 def load_manual_selection(root_dir: Union[Path, str]):
@@ -534,7 +586,7 @@ def load_manual_selection(root_dir: Union[Path, str]):
         Manual selection labels loaded from disk.
     """
     save_dir = get_save_directory(root_dir)
-    return np.load(save_dir / "manual_selection.npy")
+    return np.load(manual_selection_path(save_dir))
 
 
 def is_manual_selection_saved(root_dir: Union[Path, str]):
@@ -551,7 +603,7 @@ def is_manual_selection_saved(root_dir: Union[Path, str]):
         Whether manual selection labels exist on disk.
     """
     save_dir = get_save_directory(root_dir)
-    return (save_dir / "manual_selection.npy").exists()
+    return manual_selection_path(save_dir).exists()
 
 
 def save_selection(
