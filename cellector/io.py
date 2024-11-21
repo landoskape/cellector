@@ -191,6 +191,7 @@ def create_from_suite2p(
     extra_features: dict = {},
     autocompute: bool = True,
     clear_existing: bool = False,
+    save_features: bool = True,
 ):
     """Create a RoiProcessor object from a suite2p directory.
 
@@ -206,6 +207,11 @@ def create_from_suite2p(
         Extra features to add to the RoiProcessor object. Default is empty.
     autocompute : bool, optional
         Whether to automatically compute all features for the RoiProcessor object. Default is True.
+    clear_existing : bool, optional
+        Whether to clear existing cellector files in the root directory. Default is False.
+    save_features : bool, optional
+        Whether to save the features to disk. As soon as features are computed, they will be saved
+        in the cellector folder. Default is True.
 
     Returns
     -------
@@ -225,7 +231,9 @@ def create_from_suite2p(
     plane_idx = np.repeat(np.arange(s2p_data.num_planes), s2p_data.rois_per_plane)
 
     # Initialize roi_processor object with suite2p data
-    return RoiProcessor(suite2p_dir, stats, references, plane_idx, extra_features=extra_features, autocompute=autocompute)
+    return RoiProcessor(
+        suite2p_dir, stats, references, plane_idx, extra_features=extra_features, autocompute=autocompute, save_features=save_features
+    )
 
 
 def create_from_mask_volume(
@@ -236,6 +244,7 @@ def create_from_mask_volume(
     extra_features: dict = {},
     autocompute: bool = True,
     clear_existing: bool = False,
+    save_features: bool = True,
 ):
     """Create a RoiProcessor object
 
@@ -255,6 +264,11 @@ def create_from_mask_volume(
         Extra features to add to the RoiProcessor object. Default is empty.
     autocompute : bool, optional
         Whether to automatically compute all features for the RoiProcessor object. Default is True.
+    clear_existing : bool, optional
+        Whether to clear existing cellector files in the root directory. Default is False.
+    save_features : bool, optional
+        Whether to save the features to disk. As soon as features are computed, they will be saved
+        in the cellector folder. Default is True.
 
     Returns
     -------
@@ -264,7 +278,7 @@ def create_from_mask_volume(
     if clear_existing:
         clear_cellector_files(root_dir)
     stats = get_pixel_data(mask_volume)
-    return RoiProcessor(root_dir, stats, references, plane_idx, extra_features=extra_features, autocompute=autocompute)
+    return RoiProcessor(root_dir, stats, references, plane_idx, extra_features=extra_features, autocompute=autocompute, save_features=save_features)
 
 
 def create_from_pixel_data(
@@ -275,6 +289,7 @@ def create_from_pixel_data(
     extra_features: dict = {},
     autocompute: bool = True,
     clear_existing: bool = False,
+    save_features: bool = True,
 ):
     """Create a RoiProcessor object
 
@@ -294,6 +309,11 @@ def create_from_pixel_data(
         Extra features to add to the RoiProcessor object. Default is empty.
     autocompute : bool, optional
         Whether to automatically compute all features for the RoiProcessor object. Default is True.
+    clear_existing : bool, optional
+        Whether to clear existing cellector files in the root directory. Default is False.
+    save_features : bool, optional
+        Whether to save the features to disk. As soon as features are computed, they will be saved
+        in the cellector folder. Default is True.
 
     Returns
     -------
@@ -302,7 +322,7 @@ def create_from_pixel_data(
     """
     if clear_existing:
         clear_cellector_files(root_dir)
-    return RoiProcessor(root_dir, stats, references, plane_idx, extra_features=extra_features, autocompute=autocompute)
+    return RoiProcessor(root_dir, stats, references, plane_idx, extra_features=extra_features, autocompute=autocompute, save_features=save_features)
 
 
 def get_save_directory(root_dir: Union[Path, str]):

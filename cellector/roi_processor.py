@@ -100,6 +100,7 @@ class RoiProcessor:
         extra_features: Optional[Dict[str, List[np.ndarray]]] = None,
         autocompute: bool = True,
         use_saved: bool = True,
+        save_features: bool = True,
         **kwargs: dict,
     ):
         """Initialize the RoiProcessor with ROI stats and reference images.
@@ -130,6 +131,8 @@ class RoiProcessor:
             if you want to compute a subset of the features, which you can do manually. Default is True.
         use_saved : bool, optional
             If True, will attempt to load saved features from disk if they exist. Default is True.
+        save_features : bool, optional
+            If True, will save the computed features to disk. Default is True.
         **kwargs : dict
             Additional parameters to update the default parameters used for preprocessing.
         """
@@ -214,6 +217,7 @@ class RoiProcessor:
             self.register_feature_pipeline(pipeline)
 
         # Measure features
+        self.save_features = save_features
         if autocompute:
             self.compute_features(use_saved)
 
@@ -253,7 +257,9 @@ class RoiProcessor:
         if len(values) != self.num_rois:
             raise ValueError(f"Length of feature values ({len(values)}) for feature {name} must match number of ROIs ({self.num_rois})")
         self.features[name] = values  # cache the feature values
-        io.save_feature(self.root_dir, name, values)  # save to disk
+        if self.save_features:
+            # save to disk if requested
+            io.save_feature(self.root_dir, name, values)
 
     def register_feature_pipeline(self, pipeline: FeaturePipeline):
         """Register a feature pipeline with the RoiProcessor instance.
