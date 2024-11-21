@@ -1,6 +1,7 @@
 from typing import List, Union, Dict, Optional, Tuple
 from pathlib import Path
 import shutil
+import re
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 import numpy as np
@@ -393,6 +394,17 @@ def propagate_criteria(root_dir: Union[Path, str], *target_dirs: Union[Path, str
                 (copy_dir / file).unlink()
             unsuccessful_copies[copy_dir] = e
     return successful_copies, unsuccessful_copies
+
+
+# Will add soon
+# def identify_features(root_dir):
+#     """Identify features saved in the cellector directory."""
+#     save_dir = get_save_directory(root_dir)
+#     features = [pth.stem for pth in save_dir.glob("*_criteria.npy")]
+#     feature_matches = [re.match("(.*)_criteria", f) for f in features]
+#     feature_names = [m.group(1) for m in feature_matches if m]
+#     features = [fname for fname in feature_names if (save_dir / f"{fname}.npy").exists()]
+#     return features
 
 
 def feature_path(save_dir: Union[Path, str], name: str):
