@@ -1,4 +1,6 @@
-from typing import List, Tuple, Optional, Sequence
+from typing import List, Tuple, Optional, Sequence, Callable
+import warnings
+import functools
 import numpy as np
 import numba as nb
 from scipy.ndimage import binary_dilation, generate_binary_structure
@@ -23,6 +25,32 @@ def broadcastable(x: np.ndarray, y: np.ndarray) -> bool:
         if i != j and i != 1 and j != 1:
             return False
     return True
+
+
+def deprecated(reason: str, version: Optional[str] = None):
+    """
+    Decorator to mark functions as deprecated.
+
+    Parameters
+    ----------
+    reason : str
+        Reason why the function is being deprecated and what to use instead.
+    version : str, optional
+        Version the function will be removed in.
+    """
+
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            warning_msg = f"{func.__name__} is deprecated.\n{reason}"
+            if version:
+                warning_msg += f"\nIt will be removed in version {version}."
+            warnings.warn(warning_msg, DeprecationWarning, stacklevel=2)
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 def transpose(sequence: Sequence) -> List:
