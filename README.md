@@ -60,6 +60,23 @@ gui = SelectionGUI(roi_processor)
 
 Then, use the GUI and hit save! Instructions for the GUI are [here](./docs/gui.md).
 
+#### Name convention updates
+The first version of cellector used poor naming convention for saving features and
+feature criteria. This has been rectified in version 0.2.0, but will create backward
+incompatibility for any data files that were saved with the previous convention. To
+address this, a few functions have been provided which can update the previous names to
+follow the new convention called ``identify_cellector_folders`` and 
+``update_feature_paths``. You can use ``identify...`` to get all folders that contain a
+cellector directory and ``update...`` to convert the filepaths to the new structure.
+These functions are in cellector/io/operations. 
+```python
+from pathlib import Path
+from cellector.io.operations import identify_cellector_folders, update_feature_paths
+top_level_dir = Path(r"C:\Users\Andrew\Documents")
+cellector_folders = identify_cellector_folders(top_level_dir)
+update_feature_paths(cellector_folders)
+```
+
 ## Features in Progress
 #### Hyperparameter Choices
 There are a few "hyperparameters" to the package, including filtering parameters, the eps
