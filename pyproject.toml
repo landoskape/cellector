@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cellector"
-version = "0.2.0"
+version = "0.2.0" # __version__ - commented with underscores so I can search and update it for each release
 authors = [
     { name = "Andrew T. Landau" },
     { email = "andrewtylerlandau@gmaildotcom" }

@@ -14,7 +14,7 @@ components should be removed from the GUI to an independent module which can be 
 the GUI or by other methods for scripting. 
 
 Let's change to "selection" and "focus" so idx_selection means the ROIs selected by feature
-criteria and manual annotation. Focus is what's currently shown right now. 
+criteria and manual annotation. Focus is what's currently shown right now.
 
 ## [0.2.0] - YYYY-MM-DD --- NOT UPLOADED YET
 
@@ -24,7 +24,7 @@ input argument called ``save_features`` that is passed to the ``RoiProcessor``. 
 determines if feature values are saved to disk automatically. The default value is True,
 but you might want to set it to False for your purposes. 
 
-Added *_path functions for consistency and DRYing in the IO module.
+Added more functions for determining paths for consistency and using the DRY principle. 
 
 ### Changed
 #### Major change: filepath structure for features
