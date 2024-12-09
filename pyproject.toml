@@ -7,7 +7,7 @@ name = "cellector"
 version = "0.2.0" # __version__ - commented with underscores so I can search and update it for each release
 authors = [
     { name = "Andrew T. Landau" },
-    { email = "andrewtylerlandau@gmaildotcom" }
+    { email = "andrewtylerlandau@gmaildot.com" }
 ]
 description = "A pipeline and GUI for determining which ROIs match features in a fluorescence image."
 readme = { file = "README.md", content-type = "text/markdown" } 
@@ -27,3 +27,10 @@ dependencies = [
 [project.urls]
 "Homepage" = "https://github.com/landoskape/cellector"
 "Bug Tracker" = "https://github.com/landoskape/cellector/issues"
+
+
+# Reminder to self:
+# For each new release, go to package folder and run:
+# python -m build
+# python -m twine upload --repository testpypi dist/* 
+# python -m twine upload --repository pypi dist/* 
