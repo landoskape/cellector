@@ -4,9 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cellector"
-version = "0.1.0"
+version = "0.2.0" # __version__ - commented with underscores so I can search and update it for each release
 authors = [
     { name = "Andrew T. Landau" },
+    { email = "andrewtylerlandau@gmaildotcom" }
 ]
 description = "A pipeline and GUI for determining which ROIs match features in a fluorescence image."
 readme = { file = "README.md", content-type = "text/markdown" } 
