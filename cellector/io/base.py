@@ -35,6 +35,8 @@ def feature_path(save_dir: Union[Path, str], name: str):
     path : Path
         Path to the feature file.
     """
+    if not isinstance(save_dir, Path):
+        save_dir = Path(save_dir)
     return save_dir / f"{name}_feature.npy"
 
 
@@ -108,6 +110,8 @@ def criteria_path(save_dir: Union[Path, str], name: str):
     path : Path
         Path to the feature criterion file.
     """
+    if not isinstance(save_dir, Path):
+        save_dir = Path(save_dir)
     return save_dir / f"{name}_featurecriteria.npy"
 
 
@@ -179,6 +183,8 @@ def manual_selection_path(save_dir: Union[Path, str]):
     path : Path
         Path to the manual selection labels file.
     """
+    if not isinstance(save_dir, Path):
+        save_dir = Path(save_dir)
     return save_dir / "manual_selection.npy"
 
 
@@ -207,11 +213,16 @@ def load_manual_selection(root_dir: Union[Path, str]):
 
     Returns
     -------
-    manual_selection : np.ndarray
-        Manual selection labels loaded from disk.
+    manual_label : np.ndarray
+        Manual label array.
+    manual_label_active : np.ndarray
+        Manual label active flag array.
     """
     save_dir = get_save_directory(root_dir)
-    return np.load(manual_selection_path(save_dir))
+    manual_selection = np.load(manual_selection_path(save_dir))
+    manual_label = manual_selection[:, 0]
+    manual_label_active = manual_selection[:, 1]
+    return manual_label, manual_label_active
 
 
 def is_manual_selection_saved(root_dir: Union[Path, str]):

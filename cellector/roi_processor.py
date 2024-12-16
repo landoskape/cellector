@@ -240,7 +240,9 @@ class RoiProcessor:
                     value = io.load_saved_feature(self.root_dir, name)
                     if len(value) == self.num_rois:
                         self.add_feature(name, value)
+                        # Skip recomputing the feature and move to next one
                         continue
+
             # If the feature is not saved or the shapes don't match, compute the feature again and add it
             self.add_feature(name, method(self))
 
