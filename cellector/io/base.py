@@ -59,7 +59,7 @@ def save_feature(root_dir: Union[Path, str], name: str, feature: np.ndarray) -> 
     np.save(feature_path(root_dir, name), feature)
 
 
-def load_saved_feature(root_dir: Union[Path, str], name: str) -> np.ndarray:
+def load_feature(root_dir: Union[Path, str], name: str) -> np.ndarray:
     """Load a feature from disk.
 
     Parameters
@@ -131,7 +131,7 @@ def save_criteria(root_dir: Union[Path, str], name: str, criteria: np.ndarray) -
     np.save(criteria_path(root_dir, name), criteria)
 
 
-def load_saved_criteria(root_dir: Union[Path, str], name: str) -> np.ndarray:
+def load_criteria(root_dir: Union[Path, str], name: str) -> np.ndarray:
     """Load a feature criterion from disk.
 
     Parameters
@@ -301,58 +301,3 @@ def is_idx_selected_saved(root_dir: Union[Path, str]) -> bool:
         Whether selected ROI indices exist on disk.
     """
     return idx_selected_path(root_dir).exists()
-
-
-def save_selection(
-    roi_processor: RoiProcessor,
-    idx_target: np.ndarray,
-    criteria: Dict[str, list],
-    manual_selection: Optional[np.ndarray] = None,
-):
-    """Save roi processor features, criterion, and target index to disk.
-
-    Parameters
-    ----------
-    roi_processor : RoiProcessor
-        RoiProcessor object with features and folders to save to.
-    idx_target : np.ndarray
-        Target index over all ROIs. Should be a numpy array with shape (num_rois,) where each value is a boolean indicating
-        whether the ROI is one of the "target" cells. This means it meets all feature criteria and manual selection criteria.
-    criteria : Dict[str, list]
-        Dictionary of feature criteria for each feature. Each value in the dictionary should be a 2 element list containing
-        the minimum and maximum values for the feature. If the minimum or maximum cutoff is ignored, then that value should
-        be set to None.
-    manual_selection : np.ndarray
-        Manual selection labels for each ROI. Shape should be (num_rois, 2), where the first column is the manual label
-        and the second column is whether or not to use a manual label for that cell.
-    """
-    # Check that everything has the expected shapes
-    if idx_target.shape[0] != roi_processor.num_rois:
-        raise ValueError(f"Target indices have shape {idx_target.shape} but expected {roi_processor.num_rois}!")
-    if manual_selection is not None:
-        if (manual_selection.shape[0] != roi_processor.num_rois) or (manual_selection.shape[1] != 2):
-            raise ValueError(f"Manual selection labels have shape {manual_selection.shape} but expected ({roi_processor.num_rois}, 2)!")
-    for name, value in criteria.items():
-        if name not in roi_processor.features:
-            raise ValueError(f"Feature {name} not found in roi_processor features!")
-        if len(value) != 2:
-            raise ValueError(f"Feature criteria {name} has shape {value.shape} but expected (2,)!")
-    if any(feature not in criteria for feature in roi_processor.features):
-        raise ValueError(f"Feature criteria missing for features: {set(roi_processor.features) - set(criteria)}!")
-
-    # Load and create save directory
-    save_dir = get_save_directory(roi_processor.root_dir)
-    save_dir.mkdir(exist_ok=True)
-
-    # Save features values for each plane
-    for name, values in roi_processor.features.items():
-        save_feature(roi_processor.root_dir, name, values)
-    if manual_selection is not None:
-        save_manual_selection(roi_processor.root_dir, manual_selection)
-
-    # Save selection indices
-    np.save(save_dir / "targetcells.npy", idx_target)
-
-    # Save feature criteria
-    for name, value in criteria.items():
-        save_criteria(roi_processor.root_dir, name, value)
