@@ -80,9 +80,7 @@ class SelectionGUI:
         self.idx_meets_criteria = np.full(self.roi_processor.num_rois, True)
 
         if io.is_manual_selection_saved(self.roi_processor.root_dir):
-            manual_selection = io.load_manual_selection(self.roi_processor.root_dir)
-            self.manual_label = manual_selection[:, 0]
-            self.manual_label_active = manual_selection[:, 1]
+            self.manual_label, self.manual_label_active = io.load_manual_selection(self.roi_processor.root_dir)
         else:
             self.manual_label = np.full(self.roi_processor.num_rois, False)
             self.manual_label_active = np.full(self.roi_processor.num_rois, False)
