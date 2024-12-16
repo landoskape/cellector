@@ -415,7 +415,7 @@ class SelectionGUI:
             # Try loading feature cutoffs
             load_successful = False
             if io.is_criteria_saved(self.roi_processor.root_dir, feature):
-                cutoffs = io.load_saved_criteria(self.roi_processor.root_dir, feature)
+                cutoffs = io.load_criteria(self.roi_processor.root_dir, feature)
                 if cutoffs[0] is None:
                     cutoffs[0] = self.feature_range[feature][0]
                     self.feature_active[feature][0] = False
