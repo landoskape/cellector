@@ -1,12 +1,14 @@
-from typing import Union, List
+from typing import Union, List, Optional
 from pathlib import Path
 import shutil
 import re
+import numpy as np
 from .base import get_save_directory
+from .base import load_feature, load_criteria, FEATURE_EXTENSION, CRITERIA_EXTENSION
 from ..utils import deprecated
 
 
-def clear_cellector_files(root_dir: Union[Path, str]):
+def clear_cellector_files(root_dir: Union[Path, str]) -> None:
     """Clear all files in the cellector save directory for a root directory.
 
     Parameters
@@ -19,6 +21,33 @@ def clear_cellector_files(root_dir: Union[Path, str]):
         for file in save_dir.glob("*"):
             file.unlink()
         save_dir.rmdir()
+
+
+def identify_feature_files(root_dir: Union[Path, str], criteria: bool = True) -> List[str]:
+    """Identify cellector features or feature criteria files that are saved in a cellector directory.
+
+    Features and feature criteria are saved with a particular convention that makes them
+    easy to find, (features: {name}_feature.npy, criteria: {name}_featurecriteria.npy).
+    This function will return a list of the names of the features or feature criteria
+    that are saved in the cellector directory under root_dir.
+
+    Parameters
+    ----------
+    root_dir : Path or str
+        Path to the root directory (cellector folder is root_dir / 'cellector').
+    criteria : bool, optional
+        Whether to identify feature criteria files (instead of features), by default True
+
+    Returns
+    -------
+    feature_names : list of str
+        List of feature (or feature criteria) names that are saved in the cellector folder.
+    """
+    EXTENSION = CRITERIA_EXTENSION if criteria else FEATURE_EXTENSION
+    save_dir = get_save_directory(root_dir)
+    files = [pth.stem for pth in save_dir.glob(f"*{EXTENSION}.npy")]
+    names = [re.match(f"(.*){EXTENSION}", f).group(1) for f in files]
+    return names
 
 
 def propagate_criteria(root_dir: Union[Path, str], *target_dirs: Union[Path, str]):
@@ -60,7 +89,7 @@ def propagate_criteria(root_dir: Union[Path, str], *target_dirs: Union[Path, str
     return successful_copies, unsuccessful_copies
 
 
-@deprecated("Provided to address backwards incompatibility", version="1.0.0")
+@deprecated("Provided to address backwards incompatibility")
 def identify_cellector_folders(top_level_dir: Union[Path, str]):
     """Identify any directories that contain cellector save directories.
 
@@ -84,7 +113,7 @@ def identify_cellector_folders(top_level_dir: Union[Path, str]):
     return cellector_dirs
 
 
-@deprecated("Provided to address backwards incompatibility", version="1.0.0")
+@deprecated("Provided to address backwards incompatibility")
 def update_feature_paths(root_dirs: List[Union[Path, str]], remove_old: bool = True):
     """Update the feature paths for a feature across multiple root directories.
 
@@ -140,3 +169,35 @@ def update_feature_paths(root_dirs: List[Union[Path, str]], remove_old: bool = T
             old_path = _old_feature_path(save_dir, feature_name)
             new_path = feature_path(save_dir, feature_name)
             move_method(old_path, new_path)
+
+
+@deprecated("Provided to address backwards incompatibility with manual selection shape")
+def update_manual_selection_shape(root_dirs: List[Union[Path, str]]):
+    """Update the feature paths for a feature across multiple root directories.
+
+    After version 0.2.0, the handling of manual selections data was changed to stack them
+    on axis=0 for simplification. This function updates the manual selection data across
+    multiple root directories to be consistent with the new format. If any
+    manual_selection data is found with shape (num_rois, 2), it will transpose it and
+    resave on the same path.
+
+    Parameters
+    ----------
+    root_dirs : list of Path or str
+        List of root directories to update the manual selection shape for.
+    """
+    from .base import is_manual_selection_saved, manual_selection_path
+
+    for root_dir in root_dirs:
+        if is_manual_selection_saved(root_dir):
+            filepath = manual_selection_path(root_dir)
+            manual_selection = np.load(filepath)
+            if manual_selection.ndim != 2:
+                print(f"Manual selection data in {root_dir} has shape {manual_selection.shape}, expected (2, num_rois) or (num_rois, 2). Skipping.")
+                continue
+            if manual_selection.shape[0] != 2 and manual_selection.shape[1] == 2:
+                # Wrong shape, need to transpose
+                manual_selection = manual_selection.T
+                np.save(filepath, manual_selection)
+            else:
+                print(f"Manual selection data in {root_dir} has shape {manual_selection.shape}, expected (2, num_rois) or (num_rois, 2). Skipping.")
