@@ -4,7 +4,7 @@ import shutil
 import re
 import numpy as np
 from .base import get_save_directory
-from .base import load_feature, load_criteria, FEATURE_EXTENSION, CRITERIA_EXTENSION
+from .base import criteria_path, save_criteria, FEATURE_EXTENSION, CRITERIA_EXTENSION
 from ..utils import deprecated
 
 
@@ -70,22 +70,26 @@ def propagate_criteria(root_dir: Union[Path, str], *target_dirs: Union[Path, str
     if not target_dirs:
         raise ValueError("No directories to copy feature criteria to!")
 
-    save_dir = get_save_directory(root_dir)
-    copy_dirs = [get_save_directory(target_dir) for target_dir in target_dirs]
+    # Load feature criteria names from root_dir
+    criteria_names = identify_feature_files(root_dir, criteria=True)
+    # Load feature criteria values from root_dir
+    criteria_values = {name: np.load(criteria_path(root_dir, name)) for name in criteria_names}
+
+    # Copy feature criteria to target_dirs
     successful_copies = {}
     unsuccessful_copies = {}
-    for copy_dir in copy_dirs:
-        copy_dir.mkdir(exist_ok=True)
-        successful_copies[copy_dir] = []
+    for target_dir in target_dirs:
+        successful_copies[target_dir] = []
         try:
-            for file in save_dir.glob("*_criteria.npy"):
-                shutil.copy(file, copy_dir / file.name)
-                successful_copies[copy_dir].append(file.name)
+            for name, values in zip(criteria_names, criteria_values):
+                save_criteria(target_dir, name, values)
+                successful_copies[target_dir].append(name)
         except Exception as e:
             # remove incomplete files from failed copy
-            for file in successful_copies[copy_dir]:
-                (copy_dir / file).unlink()
-            unsuccessful_copies[copy_dir] = e
+            for name in successful_copies[target_dir]:
+                criteria_path(target_dir, name).unlink()
+            unsuccessful_copies[target_dir] = e
+            successful_copies.pop(target_dir)
     return successful_copies, unsuccessful_copies
 
 
