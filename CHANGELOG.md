@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
  
-## [upcoming] - 
+## [1.0.0] - UPCOMING 
 
 The gui class is a beast. It needs to be broken down into components. For example, there
 should be a method for scripting the application of criteria to feature values, but right
@@ -16,7 +16,7 @@ the GUI or by other methods for scripting.
 Let's change to "selection" and "focus" so idx_selection means the ROIs selected by feature
 criteria and manual annotation. Focus is what's currently shown right now.
 
-## [0.2.0] - YYYY-MM-DD --- NOT UPLOADED YET
+## [0.2.0] - 2024-12-09
 
 ### Added
 Saving features is now optional! The create_from_{...} functions now have an optional
