@@ -12,6 +12,7 @@ from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QGraphicsProxyWidget, QPushButton
 
 from ..roi_processor import RoiProcessor
+from ..manager import CellectorManager
 from .. import utils
 from .. import io
 
@@ -69,26 +70,22 @@ class SelectionGUI:
         The number of bins to use for the histograms of the intensity features. Default is 50.
     """
 
-    def __init__(self, roi_processor: RoiProcessor, num_bins=50):
+    def __init__(self, roi_processor: RoiProcessor, num_bins: int = 50):
         if not isinstance(roi_processor, RoiProcessor):
             raise ValueError("roi_processor must be an instance of the RoiProcessor class.")
 
         self.roi_processor = roi_processor
+        self.manager = CellectorManager(roi_processor.root_dir)
+
+        # Add features from roi_processor to manager if not already present (meaning they haven't been saved to disk)
+        for feature in self.roi_processor.features:
+            if feature not in self.manager.criteria:
+                self.manager.add_feature(feature, self.roi_processor.features[feature])
+
         self.num_bins = num_bins
         self.plane_idx = 0  # determines which plane is currently being shown in the napari viewer
 
-        self.num_features = len(self.roi_processor.features)
-        self.feature_active = {key: [True, True] for key in self.roi_processor.features}
-
-        # process initial plane
-        self.idx_meets_criteria = np.full(self.roi_processor.num_rois, True)
-
-        # load manual selection if it exists, otherwise make a new one
-        if io.is_manual_selection_saved(self.roi_processor.root_dir):
-            self.manual_label, self.manual_label_active = io.load_manual_selection(self.roi_processor.root_dir)
-        else:
-            self.manual_label = np.full(self.roi_processor.num_rois, False)
-            self.manual_label_active = np.full(self.roi_processor.num_rois, False)
+        self.num_features = len(self.manager.features)
 
         # open napari viewer and associated GUI features
         self.show_control_cells = False  # show control cells instead of target cells
@@ -97,7 +94,7 @@ class SelectionGUI:
         self.use_manual_labels = True  # if true, then will apply manual labels after using features to compute idx_meets_criteria
         self.only_manual_labels = False  # if true, only show manual labels of selected category...
         self.color_state = 0  # indicates which color to display maskLabels (0:random, 1-4:color by feature)
-        self.color_state_names = ["random", *self.roi_processor.features.keys()]
+        self.color_state_names = ["random", *self.manager.features.keys()]
         self.idx_colormap = 0  # which colormap to use for pseudo coloring the masks
         self.colormaps = ["plasma", "autumn", "spring", "summer", "winter", "hot"]
         self._initialize_napari_viewer()
@@ -117,7 +114,7 @@ class SelectionGUI:
 
     def update_feature_plots(self):
         """Update the histograms of the intensity features of the target cells in the napari viewer."""
-        for feature in self.roi_processor.features:
+        for feature in self.manager.features:
             self.hist_graphs[feature].setOpts(height=self.h_values_full[feature][self.plane_idx])
             self.hist_selected[feature].setOpts(height=self.h_values_selected[feature][self.plane_idx])
 
@@ -133,26 +130,12 @@ class SelectionGUI:
                 vmin=self.feature_range[color_state_name][0],
                 vmax=self.feature_range[color_state_name][1],
             )
-            colors = plt.colormaps[self.colormaps[self.idx_colormap]](norm(self.roi_processor.features[color_state_name]))
-            color_dict = dict(zip(1 + np.arange(self.roi_processor.num_rois), colors))
+            colors = plt.colormaps[self.colormaps[self.idx_colormap]](norm(self.manager.features[color_state_name]))
+            color_dict = dict(zip(1 + np.arange(self.manager.num_rois), colors))
             color_dict[None] = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.single)  # transparent background (or default)
             colormap = direct_colormap(color_dict)
         # Update colors of the labels
         self.labels.colormap = colormap
-
-    def update_by_feature_criterion(self):
-        """Update the idx of cells meeting the criterion defined by the features."""
-        # start with all as targets
-        self.idx_meets_criteria = np.full(self.roi_processor.num_rois, True)
-        for feature, value in self.roi_processor.features.items():
-            if self.feature_active[feature][0]:
-                # only keep in idx_meets_criteria if above minimum
-                self.idx_meets_criteria &= value >= self.feature_cutoffs[feature][0]
-            if self.feature_active[feature][1]:
-                # only keep in idx_meets_criteria if below maximum
-                self.idx_meets_criteria &= value <= self.feature_cutoffs[feature][1]
-
-        self.regenerate_mask_data()
 
     def regenerate_mask_data(self):
         """Regenerate the mask image and labels in the napari viewer based on the current selection.
@@ -162,28 +145,20 @@ class SelectionGUI:
         """
         self.masks.data = self.mask_image
         self.labels.data = self.mask_labels
-        features_by_plane = {key: utils.split_planes(value, self.roi_processor.rois_per_plane) for key, value in self.roi_processor.features.items()}
-        idx_selected_by_plane = utils.split_planes(self.idx_selected, self.roi_processor.rois_per_plane)
-        for feature in self.roi_processor.features:
+        features_by_plane = {key: utils.split_planes(value, self.roi_processor.rois_per_plane) for key, value in self.manager.features.items()}
+        idx_cursor_by_plane = utils.split_planes(self.idx_cursor, self.roi_processor.rois_per_plane)
+        for feature in self.manager.features:
             for iplane in range(self.roi_processor.num_planes):
-                c_feature_values = features_by_plane[feature][iplane][idx_selected_by_plane[iplane]]
+                c_feature_values = features_by_plane[feature][iplane][idx_cursor_by_plane[iplane]]
                 self.h_values_selected[feature][iplane] = np.histogram(c_feature_values, bins=self.h_bin_edges[feature])[0]
 
         # regenerate histograms
-        for feature in self.roi_processor.features:
+        for feature in self.manager.features:
             self.hist_selected[feature].setOpts(height=self.h_values_selected[feature][self.plane_idx])
 
     def save_selection(self):
         """Save the current selection of cells to files."""
-        manual_selection = np.stack((self.manual_label, self.manual_label_active)).T
-        feature_criteria = {}
-        for feature in self.roi_processor.features:
-            feature_criteria[feature] = self.feature_cutoffs[feature]
-            if not self.feature_active[feature][0]:
-                feature_criteria[feature][0] = None
-            if not self.feature_active[feature][1]:
-                feature_criteria[feature][1] = None
-        io.save_selection(self.roi_processor, self.idx_target, feature_criteria, manual_selection=manual_selection)
+        self.manager.save_all()
         self.update_text("Selection saved!")
 
     # ------------------------------
@@ -195,21 +170,21 @@ class SelectionGUI:
 
         Each pixel in the image is the sum of the intensity footprints of the selected
         masks in each plane. Masks are included in the sum if they are selected by the
-        user (i.e. True in idx_selected).
+        user (i.e. True in idx_cursor).
 
         Returns
         -------
         mask_image_by_plane : np.ndarray (float)
             The mask image for each plane in the volume. Filters the masks in each plane
-            by idx_selected and sums over their intensity footprints to create a
+            by idx_cursor and sums over their intensity footprints to create a
             single image for each plane.
         """
-        idx_selected = self.idx_selected
+        idx_cursor = self.idx_cursor
         image_data = np.zeros((self.roi_processor.num_planes, self.roi_processor.ly, self.roi_processor.lx), dtype=float)
         for iroi, (plane, lam, ypix, xpix) in enumerate(
             zip(self.roi_processor.plane_idx, self.roi_processor.lam, self.roi_processor.ypix, self.roi_processor.xpix)
         ):
-            if idx_selected[iroi]:
+            if idx_cursor[iroi]:
                 image_data[plane, ypix, xpix] += lam
         return image_data
 
@@ -220,7 +195,7 @@ class SelectionGUI:
         ROIs are assigned an index that is unique across all ROIs independent of plane.
         The index is offset by 1 because napari uses 0 to indicate "no label". ROIs are
         only presented if the are currently "selected" by the user (i.e. True in
-        idx_selected).
+        idx_cursor).
 
         Returns
         -------
@@ -229,20 +204,20 @@ class SelectionGUI:
             index to the ROI - and if ROIs are overlapping then the last ROI will be
             used. Only ROIs that are selected by the user are included in the labels.
         """
-        idx_selected = self.idx_selected
+        idx_cursor = self.idx_cursor
         label_data = np.zeros((self.roi_processor.num_planes, self.roi_processor.ly, self.roi_processor.lx), dtype=int)
         for iroi, (plane, ypix, xpix) in enumerate(zip(self.roi_processor.plane_idx, self.roi_processor.ypix, self.roi_processor.xpix)):
-            if idx_selected[iroi]:
+            if idx_cursor[iroi]:
                 label_data[plane, ypix, xpix] = iroi + 1
         return label_data
 
     @property
-    def idx_selected(self):
+    def idx_cursor(self):
         """Return a boolean index of the currently selected masks.
 
         Returns
         -------
-        idx_selected_by_plane : np.ndarray (bool)
+        idx_cursor_by_plane : np.ndarray (bool)
             The indices of the selected masks across planes.
         """
         if self.only_manual_labels:
@@ -251,30 +226,15 @@ class SelectionGUI:
         else:
             # otherwise, use the feature criteria
             if self.show_control_cells:
-                idx = np.copy(~self.idx_meets_criteria)
+                idx = np.copy(~self.manager.idx_meets_criteria)
             else:
-                idx = np.copy(self.idx_meets_criteria)
+                idx = np.copy(self.manager.idx_meets_criteria)
         if self.use_manual_labels:
-            idx[self.manual_label_active] = self.manual_label[self.manual_label_active] != self.show_control_cells
+            # Of the ROIs with active labels
+            # If manual_label is set to True, then the ROI is a target cell, not a control cell
+            # So update the cursor index to manual_label != show_control_cells so that we either show manual target or manual control cells
+            idx[self.manager.manual_label_active] = self.manager.manual_label[self.manager.manual_label_active] != self.show_control_cells
         return idx
-
-    @property
-    def idx_target(self):
-        """Return a boolean index of the target masks.
-
-        Any mask that is True in this index is considered a target mask. These are all the masks
-        that meet feature criteria and have manual labels.
-
-        Returns
-        -------
-        idx_target : np.ndarray (bool)
-            The indices of the target masks across planes.
-        """
-        # these meet feature criteria for active features
-        idx_target = np.copy(self.idx_meets_criteria)
-        # overwrite any that have manual labels
-        idx_target[self.manual_label_active] = self.manual_label[self.manual_label_active]
-        return idx_target
 
     # ------------------------------------------------------------------------------------------------
     # ----------------------------------- GUI Initialization -----------------------------------------
@@ -327,8 +287,6 @@ class SelectionGUI:
         self._prepare_feature_histograms()
         self._build_histograms()
         self._build_cutoff_lines()
-        # Reset selection based on feature cutoffs if saved cutoffs were found
-        self.update_by_feature_criterion()
         self._build_feature_toggles()
         self._build_buttons()
 
@@ -363,22 +321,22 @@ class SelectionGUI:
         value for the y-range of the histograms is set independently for each feature which
         constrains the users scrolling to a useful range.
         """
-        self.h_values_full = {key: [None] * self.roi_processor.num_planes for key in self.roi_processor.features}
-        self.h_values_selected = {key: [None] * self.roi_processor.num_planes for key in self.roi_processor.features}
-        self.h_bin_edges = {key: [None] for key in self.roi_processor.features}
+        self.h_values_full = {key: [None] * self.roi_processor.num_planes for key in self.manager.features}
+        self.h_values_selected = {key: [None] * self.roi_processor.num_planes for key in self.manager.features}
+        self.h_bin_edges = {key: [None] for key in self.manager.features}
 
         # set the edges of the histograms for each feature (this is the same across planes)
-        for feature_name, feature_values in self.roi_processor.features.items():
+        for feature_name, feature_values in self.manager.features.items():
             feature_edges = np.histogram(feature_values, bins=self.num_bins)[1]
             self.h_bin_edges[feature_name] = feature_edges
 
         # compute histograms for each feature in each plane
-        features_by_plane = {key: utils.split_planes(value, self.roi_processor.rois_per_plane) for key, value in self.roi_processor.features.items()}
-        idx_selected_by_plane = utils.split_planes(self.idx_selected, self.roi_processor.rois_per_plane)
-        for feature in self.roi_processor.features:
+        features_by_plane = {key: utils.split_planes(value, self.roi_processor.rois_per_plane) for key, value in self.manager.features.items()}
+        idx_cursor_by_plane = utils.split_planes(self.idx_cursor, self.roi_processor.rois_per_plane)
+        for feature in self.manager.features:
             for iplane in range(self.roi_processor.num_planes):
                 all_values_this_plane = features_by_plane[feature][iplane]
-                sel_values_this_plane = all_values_this_plane[idx_selected_by_plane[iplane]]
+                sel_values_this_plane = all_values_this_plane[idx_cursor_by_plane[iplane]]
                 self.h_values_full[feature][iplane] = np.histogram(all_values_this_plane, bins=self.h_bin_edges[feature])[0]
                 self.h_values_selected[feature][iplane] = np.histogram(sel_values_this_plane, bins=self.h_bin_edges[feature])[0]
 
@@ -388,9 +346,9 @@ class SelectionGUI:
     def _build_histograms(self):
         """Build the histograms of the intensity features of the target cells in the GUI."""
         self.hist_layout = pg.GraphicsLayout()
-        self.hist_graphs = {key: [None] for key in self.roi_processor.features}
-        self.hist_selected = {key: [None] for key in self.roi_processor.features}
-        for feature in self.roi_processor.features:
+        self.hist_graphs = {key: [None] for key in self.manager.features}
+        self.hist_selected = {key: [None] for key in self.manager.features}
+        for feature in self.manager.features:
             bar_width = np.diff(self.h_bin_edges[feature][:2])
             bin_centers = self.h_bin_edges[feature][:-1] + bar_width / 2
             height_full = self.h_values_full[feature][self.plane_idx]
@@ -400,8 +358,8 @@ class SelectionGUI:
 
         self.preserve_methods = {}
 
-        self.hist_plots = {key: [None] for key in self.roi_processor.features}
-        for ifeature, feature in enumerate(self.roi_processor.features):
+        self.hist_plots = {key: [None] for key in self.manager.features}
+        for ifeature, feature in enumerate(self.manager.features):
             self.hist_plots[feature] = self.plot_area.addPlot(row=0, col=ifeature, title=feature)
             self.hist_plots[feature].setMouseEnabled(x=False)
             self.hist_plots[feature].setYRange(0, self.h_values_maximum[feature])
@@ -412,45 +370,40 @@ class SelectionGUI:
 
     def _build_cutoff_lines(self):
         self.feature_range = {}
+        self.feature_active = {}
         self.feature_cutoffs = {}
         self.cutoff_lines = {}
-        for feature in self.roi_processor.features:
+        for feature in self.manager.features:
+            criterion = self.manager.criteria[feature]
+            # Set range to min / max of the bin edges
             self.feature_range[feature] = [np.min(self.h_bin_edges[feature]), np.max(self.h_bin_edges[feature])]
+            # Set active cutoff to True of not NOne
+            self.feature_active[feature] = [criterion[0] is not None, criterion[1] is not None]
+            # Set cutoffs to the criteria values
+            self.feature_cutoffs[feature] = copy(criterion)
+            # But if no criteria, set to the range
+            if self.feature_cutoffs[feature][0] is None:
+                self.feature_cutoffs[feature][0] = self.feature_range[feature][0]
+            if self.feature_cutoffs[feature][1] is None:
+                self.feature_cutoffs[feature][1] = self.feature_range[feature][1]
 
-            # Try loading feature cutoffs
-            load_successful = False
-            if io.is_criteria_saved(self.roi_processor.root_dir, feature):
-                cutoffs = io.load_saved_criteria(self.roi_processor.root_dir, feature)
-                if cutoffs[0] is None:
-                    cutoffs[0] = self.feature_range[feature][0]
-                    self.feature_active[feature][0] = False
-                if cutoffs[1] is None:
-                    cutoffs[1] = self.feature_range[feature][1]
-                    self.feature_active[feature][1] = False
-                # make sure cutoffs are in order from lowest to highest
-                cutoffs = sorted(cutoffs)
-                self.feature_cutoffs[feature] = cutoffs
-                load_successful = True
-            if not load_successful:
-                # if loading fails, then set the cutoffs to the full range
-                self.feature_cutoffs[feature] = copy(self.feature_range[feature])
+            self.feature_cutoffs[feature] = sorted(self.feature_cutoffs[feature])
+
+            # Build the cutoff lines for the feature
             self.cutoff_lines[feature] = [None] * 2
             for i in range(2):
-                if self.feature_active[feature][i]:
-                    self.cutoff_lines[feature][i] = pg.InfiniteLine(pos=self.feature_cutoffs[feature][i], movable=True)
-                else:
-                    self.cutoff_lines[feature][i] = pg.InfiniteLine(pos=self.feature_range[feature][i], movable=False)
+                self.cutoff_lines[feature][i] = pg.InfiniteLine(pos=self.feature_cutoffs[feature][i], movable=True)
                 self.cutoff_lines[feature][i].setBounds(self.feature_range[feature])
                 self.cutoff_lines[feature][i].sigPositionChangeFinished.connect(functools.partial(self._update_cutoff_finished, feature=feature))
                 self.hist_plots[feature].addItem(self.cutoff_lines[feature][i])
 
     def _build_feature_toggles(self):
         self.min_max_name = ["min", "max"]
-        self.max_length_name = max([len(feature) for feature in self.roi_processor.features]) + 9
+        self.max_length_name = max([len(feature) for feature in self.manager.features]) + 9
 
-        self.use_feature_buttons = {key: [None, None] for key in self.roi_processor.features}
+        self.use_feature_buttons = {key: [None, None] for key in self.manager.features}
         self.use_feature_proxies = [None] * (self.num_features * 2)
-        for ifeature, feature in enumerate(self.roi_processor.features):
+        for ifeature, feature in enumerate(self.manager.features):
             for i in range(2):
                 proxy_idx = 2 * ifeature + i
                 if self.feature_active[feature][i]:
@@ -549,7 +502,45 @@ class SelectionGUI:
         self.feature_cutoffs[feature][1] = max_cutoff
         self.cutoff_lines[feature][0].setValue(min_cutoff)
         self.cutoff_lines[feature][1].setValue(max_cutoff)
-        self.update_by_feature_criterion()
+        self.feature_active[feature][0] = min_cutoff != self.feature_range[feature][0]
+        self.feature_active[feature][1] = max_cutoff != self.feature_range[feature][1]
+        self._update_feature_toggle(feature, 0)
+        self._update_feature_toggle(feature, 1)
+        self._update_criteria(feature)
+
+    def _toggle_feature(self, event, feature, iminmax):
+        self.feature_active[feature][iminmax] = self.use_feature_buttons[feature][iminmax].isChecked()
+        self._update_feature_toggle(feature, iminmax)
+        self._update_criteria(feature)
+
+    def _update_feature_toggle(self, feature, iminmax):
+        if self.feature_active[feature][iminmax]:
+            text_to_use = f"using {self.min_max_name[iminmax]} {feature}".center(self.max_length_name, " ")
+            self.cutoff_lines[feature][iminmax].setValue(self.feature_cutoffs[feature][iminmax])
+            self.use_feature_buttons[feature][iminmax].setText(text_to_use)
+            self.use_feature_buttons[feature][iminmax].setStyleSheet(q_not_checked_style)
+        else:
+            text_to_use = f"ignore {self.min_max_name[iminmax]} {feature}".center(self.max_length_name, " ")
+            self.cutoff_lines[feature][iminmax].setValue(self.feature_range[feature][iminmax])
+            self.use_feature_buttons[feature][iminmax].setText(text_to_use)
+            self.use_feature_buttons[feature][iminmax].setStyleSheet(q_checked_style)
+
+    def _update_criteria(self, feature):
+        cutoff_values = [
+            self.cutoff_lines[feature][0].pos()[0],
+            self.cutoff_lines[feature][1].pos()[0],
+        ]
+        cutoff_active = [
+            self.feature_active[feature][0],
+            self.feature_active[feature][1],
+        ]
+        min_cutoff, max_cutoff = min(cutoff_values), max(cutoff_values)
+        min_criterion = min_cutoff if cutoff_active[0] else None
+        max_criterion = max_cutoff if cutoff_active[1] else None
+        self.manager.update_criteria(feature, [min_criterion, max_criterion])
+
+        # update selection, which will replot everything
+        self.regenerate_mask_data()
 
     def _toggle_use_manual_labels(self, event):
         self.use_manual_labels = not self.use_manual_labels
@@ -568,29 +559,11 @@ class SelectionGUI:
     def _clear_manual_labels(self, event):
         modifiers = QtWidgets.QApplication.keyboardModifiers()
         if modifiers == QtCore.Qt.ControlModifier:
-            self.manual_label_active[:] = False
+            self.manager.manual_label_active[:] = False
             self.regenerate_mask_data()
             self.update_text("You just cleared all manual labels!")
         else:
             self.update_text("Clearing manual labels requires a control click for safety! Try again.")
-
-    def _toggle_feature(self, event, feature, iminmax):
-        self.feature_active[feature][iminmax] = self.use_feature_buttons[feature][iminmax].isChecked()
-        if self.feature_active[feature][iminmax]:
-            text_to_use = f"using {self.min_max_name[iminmax]} {feature}".center(self.max_length_name, " ")
-            self.cutoff_lines[feature][iminmax].setValue(self.feature_cutoffs[feature][iminmax])
-            self.cutoff_lines[feature][iminmax].setMovable(True)
-            self.use_feature_buttons[feature][iminmax].setText(text_to_use)
-            self.use_feature_buttons[feature][iminmax].setStyleSheet(q_not_checked_style)
-        else:
-            text_to_use = f"ignore {self.min_max_name[iminmax]} {feature}".center(self.max_length_name, " ")
-            self.cutoff_lines[feature][iminmax].setValue(self.feature_range[feature][iminmax])
-            self.cutoff_lines[feature][iminmax].setMovable(False)
-            self.use_feature_buttons[feature][iminmax].setText(text_to_use)
-            self.use_feature_buttons[feature][iminmax].setStyleSheet(q_checked_style)
-
-        # update selection, which will replot everything
-        self.update_by_feature_criterion()
 
     def _toggle_cells_to_view(self, event):
         # changes whether to plot control or target cells (maybe add a textbox and update it so as to not depend on looking at the print outputs...)
@@ -639,7 +612,7 @@ class SelectionGUI:
 
         # get ROI data
         roi_idx = label_idx - 1  # oh napari, oh napari
-        feature_print = [f"{feature}={fvalue[roi_idx]:.3f}" for feature, fvalue in self.roi_processor.features.items()]
+        feature_print = [f"{feature}={fvalue[roi_idx]:.3f}" for feature, fvalue in self.manager.features.items()]
 
         string_to_print = f"ROI: {roi_idx}" + " ".join(feature_print)
 
@@ -674,15 +647,15 @@ class SelectionGUI:
                 roi_idx = label_idx - 1
                 if "Control" in event.modifiers:
                     if self.only_manual_labels:
-                        self.manual_label_active[roi_idx] = False
+                        self.manager.manual_label_active[roi_idx] = False
                         self.update_text(f"you just removed the manual label from roi: {roi_idx}")
                     else:
                         self.update_text(f"you can only remove a label if you are only looking at manual labels!")
                 else:
                     # manual annotation: if plotting control cells, then annotate as target (1), if plotting target cells, annotate as control (0)
                     new_label = copy(self.show_control_cells)
-                    self.manual_label[roi_idx] = new_label
-                    self.manual_label_active[roi_idx] = True
+                    self.manager.manual_label[roi_idx] = new_label
+                    self.manager.manual_label_active[roi_idx] = True
                     self.update_text(f"you just labeled roi: {roi_idx} with the identity: {new_label}")
                 self.regenerate_mask_data()
 
