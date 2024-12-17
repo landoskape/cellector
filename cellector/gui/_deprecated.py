@@ -11,9 +11,9 @@ import pyqtgraph as pg
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QGraphicsProxyWidget, QPushButton
 
-from .roi_processor import RoiProcessor
-from . import utils
-from . import io
+from ..roi_processor import RoiProcessor
+from ..utils import split_planes, deprecated
+from .. import io
 
 basic_button_style = """
 QWidget {
@@ -49,6 +49,7 @@ QWidget {
 """
 
 
+@deprecated("This is the old version of the SelectionGUI class. Use the new version with from cellector.gui import SelectionGUI.")
 class SelectionGUI:
     """A GUI for selecting cells based on features in reference to a fluorescence image.
 
@@ -80,9 +81,7 @@ class SelectionGUI:
         self.idx_meets_criteria = np.full(self.roi_processor.num_rois, True)
 
         if io.is_manual_selection_saved(self.roi_processor.root_dir):
-            manual_selection = io.load_manual_selection(self.roi_processor.root_dir)
-            self.manual_label = manual_selection[:, 0]
-            self.manual_label_active = manual_selection[:, 1]
+            self.manual_label, self.manual_label_active = io.load_manual_selection(self.roi_processor.root_dir)
         else:
             self.manual_label = np.full(self.roi_processor.num_rois, False)
             self.manual_label_active = np.full(self.roi_processor.num_rois, False)
@@ -159,8 +158,8 @@ class SelectionGUI:
         """
         self.masks.data = self.mask_image
         self.labels.data = self.mask_labels
-        features_by_plane = {key: utils.split_planes(value, self.roi_processor.rois_per_plane) for key, value in self.roi_processor.features.items()}
-        idx_selected_by_plane = utils.split_planes(self.idx_selected, self.roi_processor.rois_per_plane)
+        features_by_plane = {key: split_planes(value, self.roi_processor.rois_per_plane) for key, value in self.roi_processor.features.items()}
+        idx_selected_by_plane = split_planes(self.idx_selected, self.roi_processor.rois_per_plane)
         for feature in self.roi_processor.features:
             for iplane in range(self.roi_processor.num_planes):
                 c_feature_values = features_by_plane[feature][iplane][idx_selected_by_plane[iplane]]
@@ -370,8 +369,8 @@ class SelectionGUI:
             self.h_bin_edges[feature_name] = feature_edges
 
         # compute histograms for each feature in each plane
-        features_by_plane = {key: utils.split_planes(value, self.roi_processor.rois_per_plane) for key, value in self.roi_processor.features.items()}
-        idx_selected_by_plane = utils.split_planes(self.idx_selected, self.roi_processor.rois_per_plane)
+        features_by_plane = {key: split_planes(value, self.roi_processor.rois_per_plane) for key, value in self.roi_processor.features.items()}
+        idx_selected_by_plane = split_planes(self.idx_selected, self.roi_processor.rois_per_plane)
         for feature in self.roi_processor.features:
             for iplane in range(self.roi_processor.num_planes):
                 all_values_this_plane = features_by_plane[feature][iplane]
@@ -417,7 +416,7 @@ class SelectionGUI:
             # Try loading feature cutoffs
             load_successful = False
             if io.is_criteria_saved(self.roi_processor.root_dir, feature):
-                cutoffs = io.load_saved_criteria(self.roi_processor.root_dir, feature)
+                cutoffs = io.load_criteria(self.roi_processor.root_dir, feature)
                 if cutoffs[0] is None:
                     cutoffs[0] = self.feature_range[feature][0]
                     self.feature_active[feature][0] = False

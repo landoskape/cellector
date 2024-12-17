@@ -167,6 +167,7 @@ class RoiProcessor:
         self.references = references
         self.plane_idx = plane_idx
         self.root_dir = root_dir
+        self.save_features = save_features
 
         # Extract mask data from stats dictionaries
         self.lam, self.ypix, self.xpix = utils.get_roi_data(stats)
@@ -217,7 +218,6 @@ class RoiProcessor:
             self.register_feature_pipeline(pipeline)
 
         # Measure features
-        self.save_features = save_features
         if autocompute:
             self.compute_features(use_saved)
 
@@ -237,7 +237,7 @@ class RoiProcessor:
         for name, method in self.feature_pipeline_methods.items():
             if use_saved:
                 if io.is_feature_saved(self.root_dir, name):
-                    value = io.load_saved_feature(self.root_dir, name)
+                    value = io.load_feature(self.root_dir, name)
                     if len(value) == self.num_rois:
                         self.add_feature(name, value)
                         # Skip recomputing the feature and move to next one
