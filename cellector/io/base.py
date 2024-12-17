@@ -1,7 +1,7 @@
-from typing import Union, Dict, Optional, Tuple
+from typing import Union, Tuple
 from pathlib import Path
 import numpy as np
-from ..roi_processor import RoiProcessor
+from ..utils import deprecated
 
 FEATURE_EXTENSION = "_feature"
 CRITERIA_EXTENSION = "_featurecriteria"
@@ -57,6 +57,11 @@ def save_feature(root_dir: Union[Path, str], name: str, feature: np.ndarray) -> 
     save_dir = get_save_directory(root_dir)
     save_dir.mkdir(exist_ok=True)
     np.save(feature_path(root_dir, name), feature)
+
+
+@deprecated("Use load_feature instead.", version="1.1.0")
+def load_saved_feature(*args, **kwargs):
+    return load_feature(*args, **kwargs)
 
 
 def load_feature(root_dir: Union[Path, str], name: str) -> np.ndarray:
@@ -129,6 +134,11 @@ def save_criteria(root_dir: Union[Path, str], name: str, criteria: np.ndarray) -
     save_dir = get_save_directory(root_dir)
     save_dir.mkdir(exist_ok=True)
     np.save(criteria_path(root_dir, name), criteria)
+
+
+@deprecated("Use load_criteria instead.", version="1.1.0")
+def load_saved_criteria(*args, **kwargs):
+    return load_criteria(*args, **kwargs)
 
 
 def load_criteria(root_dir: Union[Path, str], name: str) -> np.ndarray:
