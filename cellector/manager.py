@@ -3,6 +3,7 @@ from pathlib import Path
 from copy import copy
 import numpy as np
 from . import io
+from .roi_processor import RoiProcessor
 
 
 class CellectorManager:
@@ -38,6 +39,34 @@ class CellectorManager:
             # Initial state is for manual labels to all be set to False, but for none of them to be active
             self.manual_label = np.zeros(self.num_rois, dtype=bool)
             self.manual_label_active = np.zeros(self.num_rois, dtype=bool)
+
+    @classmethod
+    def make_from_roi_processor(cls, roi_processor: RoiProcessor, exclude_features: Optional[List[str]] = None) -> "CellectorManager":
+        """Create a CellectorManager from an existing RoiProcessor.
+
+        CellectorManager is usually initialized from disk, but this method allows the
+        user to create a new manager from an existing RoiProcessor object, which will
+        include any features / criteria that are stored on disk and add any features that
+        are in the RoiProcessor but not on disk yet. This is useful when pipelining the
+        and using the CellectorManager class to store the results of processing a session
+
+        Parameters
+        ----------
+        roi_processor : RoiProcessor
+            RoiProcessor object to include features from and define the root directory.
+        exclude_features : Optional[List[str]]
+            List of feature names to exclude from selection criteria
+
+        Returns
+        -------
+        CellectorManager
+            Manager object with features and criteria from the RoiProcessor object.
+        """
+        manager = cls(roi_processor.root_dir, exclude_features)
+        for feature_name, feature_values in roi_processor.features.items():
+            if feature_name not in manager.features:
+                manager.add_feature(feature_name, feature_values)
+        return manager
 
     def add_feature(self, feature_name, feature_values):
         """Add a new feature to the manager.
@@ -123,6 +152,11 @@ class CellectorManager:
         self.manual_label[idx_roi] = label
         self.manual_label_active[idx_roi] = active
 
+    def save_features(self):
+        """Save the feature values to disk."""
+        for feature, values in self.features.items():
+            io.save_feature(self.root_dir, feature, values)
+
     def save_criteria(self):
         """Save the criteria values to disk."""
         for feature, criteria in self.criteria.items():
@@ -138,6 +172,7 @@ class CellectorManager:
 
     def save_all(self):
         """Save all data to disk."""
+        self.save_features()
         self.save_criteria()
         self.save_manual_selection()
         self.save_selected()
