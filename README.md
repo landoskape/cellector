@@ -60,6 +60,31 @@ gui = SelectionGUI(roi_processor)
 
 Then, use the GUI and hit save! Instructions for the GUI are [here](./docs/gui.md).
 
+#### Scripting
+The GUI works, but it can be a bit tedious to open it over and over again when you know
+you want the same settings for a group of sessions. To enable quick application of 
+feature criteria settings to many sessions, we have included scripting tools. 
+
+```python
+from cellector.io import propgate_criteria
+from cellector.manager import CellectorManager
+
+# Copy criteria from suite2p_dir to all the other directories
+other_directories = [Path(r"C:\Path\to\other\suite2p"), Path(r"C:\Path\to\another\suite2"), ...] # as many as you like
+success, failure = propagate_criteria(suite2p_dir, *other_directories)
+
+for directory in other_directories:
+    # Make an roi_processor for each session(directory), this will compute features and save the data
+    roi_processor = create_from_suite2p(directory) # or whichever method you used to create the roi_processor
+    
+    # Make a manager instance
+    manager = CellectorManager.make_from_roi_processor(roi_processor)
+    
+    # this will save the updated criteria and idx_selection to cellector directory
+    # it will also save empty manual label arrays if they don't exist
+    manager.save_all() 
+```
+
 #### Name convention updates
 The first version of cellector used poor naming convention for saving features and
 feature criteria. This has been rectified in version 0.2.0, but will create backward
