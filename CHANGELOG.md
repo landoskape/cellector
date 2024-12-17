@@ -5,18 +5,78 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
  
-## [upcoming] - 
+## [1.0.0] - 2024-12-17
 
-The gui class is a beast. It needs to be broken down into components. For example, there
-should be a method for scripting the application of criteria to feature values, but right
-now the only way to do this is to open the GUI for each session... So that part and related
-components should be removed from the GUI to an independent module which can be accessed by
-the GUI or by other methods for scripting. 
+> ⚠️ **BREAKING CHANGES WARNING** ⚠️
+> 
+> This version introduces significant changes that will affect existing cellector 
+> installations. Key changes include:
+> - File naming conventions for features and criteria
+> - Data structure shape for manual selections
+> - Target cell filename convention
+>
+> **Action Required**: Follow the migration guide below before upgrading.
 
-Let's change to "selection" and "focus" so idx_selection means the ROIs selected by feature
-criteria and manual annotation. Focus is what's currently shown right now.
+### Migration Guide
 
-## [0.2.0] - YYYY-MM-DD --- NOT UPLOADED YET
+Several changes will prevent or complicate backwards compatibility. To address these 
+issues, version 1.0.0 includes migration utilities to fix existing data structures. 
+Here's what you need to know:
+
+1. **Required Updates**:
+   - `targetcell.npy` → `idx_selection.npy`
+   - Manual selection shape from `(num_rois, 2)` to `(2, num_rois)`
+   - Feature files from `{feature_name}.npy` to `{feature_name}_feature.npy`
+   - Criteria files from `{feature_name}_criteria.npy` to `{feature_name}_featurecriteria.npy`
+
+2. **Migration Workflow**:
+```python
+top_dir = "./some/path" # any path that you know contains all the cellector directories you've made
+root_dirs = identify_cellector_folders(top_dir)
+update_idx_selection_filenames(root_dirs)
+update_manual_selection_shape(root_dirs)
+update_feature_paths(root_dirs)
+```
+
+The [``tutorial.ipynb``](./notebooks/tutorial.ipynb) notebook includes explanations for
+how to do new things with the package including the deprecation handling.
+
+### Added
+A manager module with the ``CellectorManager`` class which can be used to manage the 
+processing of data with the Cellector package. In short, this class can be constructed
+from a ``root_dir`` or from an ``RoiProcessor`` instance directly, and has access to any
+saved data on disk in the cellector directory (``Path(root_dir) / "cellector"``), the 
+ability to update criterion values, update manual labels, and save updates including to 
+save the master ``idx_selection`` file which is the primary output of cellector (i.e. a
+boolean numpy array of which cells meet criteria to match features in a fluorescence 
+image). This is now used by the ``SelectionGUI`` to handle all communication with the 
+disk and can also be used in scripting (tutorials included). 
+
+A new refactored ``SelectionGUI`` class. Nothing should change for the user, including 
+import statements, but the GUI code is hopefully much more transparent. 
+
+A method in ``cellector.io.operations`` called ``identify_feature_files`` which can be
+used to identify any feature or feature criterion files stored in a cellector directory.
+
+### Changed
+IO Module always uses ``root_dir`` as input argument to all methods, user never has to
+explicitly compute the ``save_dir`` (which was always ``Path(root_dir) / "cellector"``).
+
+IO Module now also has methods for saving the ``idx_selection`` - the key output of the
+cellector package. This is a numpy array of bools indicating which ROIs are "selected", 
+e.g. meet the users criteria and manual labels that match fluorescence features in the 
+reference images. 
+
+IO Module method names changed from ``load_saved_{feature/criteria}`` to ``load_{f/c}``. 
+The original names are still there but marked as deprecated. They'll be removed 
+eventually.
+
+### Removed
+The IO module used to have a ``save_selection`` method for saving an entire cellector 
+session. This is removed as it has been superceded by the ``CellectorManager`` class.
+
+
+## [0.2.0] - 2024-12-09
 
 ### Added
 Saving features is now optional! The create_from_{...} functions now have an optional
