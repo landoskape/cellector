@@ -166,7 +166,7 @@ class CellectorManager:
         """Save the manual selection labels to disk."""
         io.save_manual_selection(self.root_dir, self.manual_label, self.manual_label_active)
 
-    def save_selected(self):
+    def save_idx_selected(self):
         """Save the indices of selected ROIs to disk."""
         io.save_idx_selected(self.root_dir, self.compute_idx_selected())
 
@@ -175,4 +175,4 @@ class CellectorManager:
         self.save_features()
         self.save_criteria()
         self.save_manual_selection()
-        self.save_selected()
+        self.save_idx_selected()
