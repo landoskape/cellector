@@ -93,7 +93,6 @@ def propagate_criteria(root_dir: Union[Path, str], *target_dirs: Union[Path, str
     return successful_copies, unsuccessful_copies
 
 
-@deprecated("Provided to address backwards incompatibility")
 def identify_cellector_folders(top_level_dir: Union[Path, str]):
     """Identify any directories that contain cellector save directories.
 
@@ -117,7 +116,7 @@ def identify_cellector_folders(top_level_dir: Union[Path, str]):
     return cellector_dirs
 
 
-@deprecated("Provided to address backwards incompatibility")
+# @deprecated("Provided to address backwards incompatibility")
 def update_feature_paths(root_dirs: List[Union[Path, str]], remove_old: bool = True):
     """Update the feature paths for a feature across multiple root directories.
 
@@ -175,7 +174,7 @@ def update_feature_paths(root_dirs: List[Union[Path, str]], remove_old: bool = T
             move_method(old_path, new_path)
 
 
-@deprecated("Provided to address backwards incompatibility with manual selection shape")
+# @deprecated("Provided to address backwards incompatibility with manual selection shape")
 def update_manual_selection_shape(root_dirs: List[Union[Path, str]]):
     """Update the feature paths for a feature across multiple root directories.
 
@@ -203,5 +202,31 @@ def update_manual_selection_shape(root_dirs: List[Union[Path, str]]):
                 # Wrong shape, need to transpose
                 manual_selection = manual_selection.T
                 np.save(filepath, manual_selection)
+            if manual_selection.shape[0] == 2:
+                # Correct shape, do nothing
+                pass
             else:
                 print(f"Manual selection data in {root_dir} has shape {manual_selection.shape}, expected (2, num_rois) or (num_rois, 2). Skipping.")
+
+
+# @deprecated("Provided to address an update with the standard name for the selected cells.")
+def update_idx_selection_filenames(root_dirs: List[Union[Path, str]]):
+    """Update the idx_selection filenames from targetcell.npy to idx_selected.npy.
+
+    After version 1.0.0, the idx_selection filenames were updated to idx_selected.npy to
+    be more clear with the purpose of the file and less confusing when using the GUI.
+    This function updates the filenames across multiple root directories from the
+    previous name targetcell.npy to the new name idx_selected.npy.
+
+    Parameters
+    ----------
+    root_dirs : list of Path or str
+        List of root directories to update the targetcell filenames for.
+    """
+    from .base import idx_selected_path, get_save_directory
+
+    for root_dir in root_dirs:
+        targetcell_path = get_save_directory(root_dir) / "targetcell.npy"
+        if targetcell_path.exists():
+            new_path = idx_selected_path(root_dir)
+            shutil.move(targetcell_path, new_path)
