@@ -85,22 +85,34 @@ for directory in other_directories:
     manager.save_all() 
 ```
 
-#### Name convention updates
-The first version of cellector used poor naming convention for saving features and
-feature criteria. This has been rectified in version 0.2.0, but will create backward
-incompatibility for any data files that were saved with the previous convention. To
-address this, a few functions have been provided which can update the previous names to
-follow the new convention called ``identify_cellector_folders`` and 
-``update_feature_paths``. You can use ``identify...`` to get all folders that contain a
-cellector directory and ``update...`` to convert the filepaths to the new structure.
-These functions are in cellector/io/operations. 
+#### Handling convention changes in new versions
+Several changes will prevent or complicate backwards compatibility. Here's what you need
+to know:
+- `targetcell.npy` → `idx_selection.npy`: the name convention of the main output has been changed from targetcell.npy to idx_selection.npy
+- Manual selection shape from `(num_rois, 2)` to `(2, num_rois)`: manual selection is changed from a stack across labels and active_label
+- Feature files from `{feature_name}.npy` to `{feature_name}_feature.npy`: feature files now have a suffix for automatic identification
+- Criteria files from `{feature_name}_criteria.npy` to `{feature_name}_featurecriteria.npy`: criteria files suffix changed
+
+To address these changes, version 1.0.0 includes migration utilities to fix existing data
+structures. You can use ``identify_celector_folders`` to get all folders that contain a
+cellector directory. The other three functions operate on this list and fix the filenames
+or data structure (transposing manual selection) on all cellector files. These functions
+are in cellector/io/operations. 
 ```python
 from pathlib import Path
-from cellector.io.operations import identify_cellector_folders, update_feature_paths
-top_level_dir = Path(r"C:\Users\Andrew\Documents")
-cellector_folders = identify_cellector_folders(top_level_dir)
-update_feature_paths(cellector_folders)
+from cellector.io import identify_cellector_folders
+from cellector.io import update_feature_paths
+from cellector.io import update_manual_selection_shape
+from cellector.io import update_idx_selection_filenames
+top_level_dir = Path(r"C:\some\path\that\has\all\the\cellector\directories\beneath\it")
+root_dirs = identify_cellector_folders(top_level_dir)
+update_idx_selection_filenames(root_dirs)
+update_manual_selection_shape(root_dirs)
+update_feature_paths(root_dirs)
 ```
+
+Note that a few other things have changed in version 1.0.0, see the [CHANGELOG](CHANGELOG.md)
+for more detailed descriptions!
 
 ## Features in Progress
 #### Hyperparameter Choices
