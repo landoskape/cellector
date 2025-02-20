@@ -32,7 +32,11 @@ class SelectionGUI:
         Number of bins for feature histograms, default 50
     """
 
-    def __init__(self, roi_processor: RoiProcessor, num_bins: int = SelectionConfig.DEFAULT_NUM_BINS):
+    def __init__(
+        self,
+        roi_processor: RoiProcessor,
+        num_bins: int = SelectionConfig.DEFAULT_NUM_BINS,
+    ):
         if not isinstance(roi_processor, RoiProcessor):
             raise ValueError("roi_processor must be an instance of RoiProcessor")
 
@@ -98,7 +102,9 @@ class SelectionGUI:
         self.feature_window = pg.GraphicsLayoutWidget()
 
         # Create main layout sections
-        self.text_area = pg.LabelItem("Welcome to the cell selector GUI", justify="left")
+        self.text_area = pg.LabelItem(
+            "Welcome to the cell selector GUI", justify="left"
+        )
         self.toggle_area = pg.GraphicsLayout()
         self.plot_area = pg.GraphicsLayout()
         self.button_area = pg.GraphicsLayout()
@@ -117,24 +123,37 @@ class SelectionGUI:
         self._build_buttons()
 
         # Add feature window to napari viewer
-        self.dock_window = self.viewer.window.add_dock_widget(self.feature_window, name="ROI Features", area="bottom")
+        self.dock_window = self.viewer.window.add_dock_widget(
+            self.feature_window, name="ROI Features", area="bottom"
+        )
 
     def _build_buttons(self) -> None:
         """Build the control buttons using GUIComponentFactory."""
         buttons = {
             "save": ("Save Selection", self.save_selection),
             "toggle_cells": ("Target Cells", self._toggle_cells_to_view),
-            "use_manual_labels": ("Using Manual Labels", self._toggle_use_manual_labels),
+            "use_manual_labels": (
+                "Using Manual Labels",
+                self._toggle_use_manual_labels,
+            ),
             "show_manual": ("All Labels", self._show_manual_labels),
             "clear_manual": ("Clear Manual Labels", self._clear_manual_labels),
-            "color": (self.color_state_names[self.state.color_state], self._next_color_state),
-            "colormap": (SelectionConfig.COLORMAPS[self.state.idx_colormap], self._next_colormap),
+            "color": (
+                self.color_state_names[self.state.color_state],
+                self._next_color_state,
+            ),
+            "colormap": (
+                SelectionConfig.COLORMAPS[self.state.idx_colormap],
+                self._next_colormap,
+            ),
         }
 
         self.buttons = {}
         self.button_proxies = {}
         for idx, (name, (text, callback)) in enumerate(buttons.items()):
-            button, proxy = gui_factory.create_button(text=text, callback=callback, style=SelectionConfig.STYLES["BUTTON"])
+            button, proxy = gui_factory.create_button(
+                text=text, callback=callback, style=SelectionConfig.STYLES["BUTTON"]
+            )
             self.buttons[name] = button
             self.button_proxies[name] = proxy
             self.button_area.addItem(proxy, row=0, col=idx)
@@ -155,10 +174,22 @@ class SelectionGUI:
             single image for each plane.
         """
         idx_cursor = self.idx_cursor
-        image_data = np.zeros((self.roi_processor.num_planes, self.roi_processor.ly, self.roi_processor.lx), dtype=float)
+        image_data = np.zeros(
+            (
+                self.roi_processor.num_planes,
+                self.roi_processor.ly,
+                self.roi_processor.lx,
+            ),
+            dtype=float,
+        )
 
         for iroi, (plane, lam, ypix, xpix) in enumerate(
-            zip(self.roi_processor.plane_idx, self.roi_processor.lam, self.roi_processor.ypix, self.roi_processor.xpix)
+            zip(
+                self.roi_processor.plane_idx,
+                self.roi_processor.lam,
+                self.roi_processor.ypix,
+                self.roi_processor.xpix,
+            )
         ):
             if idx_cursor[iroi]:
                 image_data[plane, ypix, xpix] += lam
@@ -181,9 +212,22 @@ class SelectionGUI:
             used. Only ROIs that are True in idx_cursor are included.
         """
         idx_cursor = self.idx_cursor
-        label_data = np.zeros((self.roi_processor.num_planes, self.roi_processor.ly, self.roi_processor.lx), dtype=int)
+        label_data = np.zeros(
+            (
+                self.roi_processor.num_planes,
+                self.roi_processor.ly,
+                self.roi_processor.lx,
+            ),
+            dtype=int,
+        )
 
-        for iroi, (plane, ypix, xpix) in enumerate(zip(self.roi_processor.plane_idx, self.roi_processor.ypix, self.roi_processor.xpix)):
+        for iroi, (plane, ypix, xpix) in enumerate(
+            zip(
+                self.roi_processor.plane_idx,
+                self.roi_processor.ypix,
+                self.roi_processor.xpix,
+            )
+        ):
             if idx_cursor[iroi]:
                 label_data[plane, ypix, xpix] = iroi + 1
 
@@ -216,7 +260,10 @@ class SelectionGUI:
             # Of the ROIs with active labels
             # If manual_label is set to True, then the ROI is a target cell, not a control cell
             # So update the cursor index to manual_label != show_control_cells so that we either show manual target or manual control cells
-            idx[self.manager.manual_label_active] = self.manager.manual_label[self.manager.manual_label_active] != self.state.show_control_cells
+            idx[self.manager.manual_label_active] = (
+                self.manager.manual_label[self.manager.manual_label_active]
+                != self.state.show_control_cells
+            )
         return idx
 
     def _init_bindings(self) -> None:
@@ -249,18 +296,32 @@ class SelectionGUI:
         self.h_bin_edges = {}
         self.h_values_maximum = {}
 
-        idx_cursor_by_plane = utils.split_planes(self.idx_cursor, self.roi_processor.rois_per_plane)
+        idx_cursor_by_plane = utils.split_planes(
+            self.idx_cursor, self.roi_processor.rois_per_plane
+        )
         for feature_name, feature_values in self.manager.features.items():
             # Compute bin edges for the feature
             edges = np.histogram(feature_values, bins=self.num_bins)[1]
             self.h_bin_edges[feature_name] = edges
 
             # Compute histograms for each plane
-            features_by_plane = utils.split_planes(feature_values, self.roi_processor.rois_per_plane)
-            cursor_by_plane = [fbp[idx] for fbp, idx in zip(features_by_plane, idx_cursor_by_plane)]
-            self.h_values_full[feature_name] = [np.histogram(plane_values, bins=edges)[0] for plane_values in features_by_plane]
-            self.h_values_cursor[feature_name] = [np.histogram(plane_values, bins=edges)[0] for plane_values in cursor_by_plane]
-            self.h_values_maximum[feature_name] = np.max(np.concatenate(self.h_values_full[feature_name]))  # Maximum is max counts across all planes
+            features_by_plane = utils.split_planes(
+                feature_values, self.roi_processor.rois_per_plane
+            )
+            cursor_by_plane = [
+                fbp[idx] for fbp, idx in zip(features_by_plane, idx_cursor_by_plane)
+            ]
+            self.h_values_full[feature_name] = [
+                np.histogram(plane_values, bins=edges)[0]
+                for plane_values in features_by_plane
+            ]
+            self.h_values_cursor[feature_name] = [
+                np.histogram(plane_values, bins=edges)[0]
+                for plane_values in cursor_by_plane
+            ]
+            self.h_values_maximum[feature_name] = np.max(
+                np.concatenate(self.h_values_full[feature_name])
+            )  # Maximum is max counts across all planes
 
     def _build_histograms(self) -> None:
         """Build histograms for feature visualization."""
@@ -299,7 +360,9 @@ class SelectionGUI:
             plot.addItem(self.hist_cursor[feature])
 
             # Set up y-range preservation
-            self.preserve_methods[feature] = functools.partial(self._preserve_y_range, feature=feature)
+            self.preserve_methods[feature] = functools.partial(
+                self._preserve_y_range, feature=feature
+            )
             plot.getViewBox().sigYRangeChanged.connect(self.preserve_methods[feature])
 
             # And add it to the dictionary of histogram plot widgets
@@ -314,8 +377,14 @@ class SelectionGUI:
 
         for feature in self.manager.features:
             criterion = self.manager.criteria[feature]
-            self.feature_range[feature] = [np.min(self.h_bin_edges[feature]), np.max(self.h_bin_edges[feature])]
-            self.feature_active[feature] = [criterion[0] is not None, criterion[1] is not None]
+            self.feature_range[feature] = [
+                np.min(self.h_bin_edges[feature]),
+                np.max(self.h_bin_edges[feature]),
+            ]
+            self.feature_active[feature] = [
+                criterion[0] is not None,
+                criterion[1] is not None,
+            ]
             self.feature_cutoffs[feature] = copy(criterion)
             # But if no criteria, set to the range
             if self.feature_cutoffs[feature][0] is None:
@@ -326,9 +395,13 @@ class SelectionGUI:
 
             cutoff_lines = []
             for i in range(2):
-                line = pg.InfiniteLine(pos=self.feature_cutoffs[feature][i], movable=True)
+                line = pg.InfiniteLine(
+                    pos=self.feature_cutoffs[feature][i], movable=True
+                )
                 line.setBounds(self.feature_range[feature])
-                line.sigPositionChangeFinished.connect(functools.partial(self._update_cutoff_finished, feature=feature))
+                line.sigPositionChangeFinished.connect(
+                    functools.partial(self._update_cutoff_finished, feature=feature)
+                )
                 cutoff_lines.append(line)
                 self.hist_plots[feature].addItem(line)
             self.cutoff_lines[feature] = cutoff_lines
@@ -336,7 +409,9 @@ class SelectionGUI:
     def _build_feature_toggles(self) -> None:
         """Build toggle buttons for feature selection."""
         self.min_max_name = ["min", "max"]
-        self.max_length_name = max(len(feature) for feature in self.manager.features) + 9
+        self.max_length_name = (
+            max(len(feature) for feature in self.manager.features) + 9
+        )
 
         self.use_feature_buttons = {}
         self.use_feature_proxies = []
@@ -349,8 +424,12 @@ class SelectionGUI:
 
                 button, proxy = gui_factory.create_button(
                     text=self._get_cutoff_toggle_text(feature, i, is_active),
-                    callback=functools.partial(self._toggle_feature, feature=feature, iminmax=i),
-                    style=SelectionConfig.STYLES["UNCHECKED" if is_active else "CHECKED"],
+                    callback=functools.partial(
+                        self._toggle_feature, feature=feature, iminmax=i
+                    ),
+                    style=SelectionConfig.STYLES[
+                        "UNCHECKED" if is_active else "CHECKED"
+                    ],
                     checkable=True,
                 )
                 button.setChecked(is_active)
@@ -364,7 +443,9 @@ class SelectionGUI:
     def _get_cutoff_toggle_text(self, feature: str, idx: int, is_active: bool) -> str:
         """Generate text for feature cutoff toggle buttons."""
         action = "using" if is_active else "ignore"
-        return f"{action} {self.min_max_name[idx]} {feature}".center(self.max_length_name, " ")
+        return f"{action} {self.min_max_name[idx]} {feature}".center(
+            self.max_length_name, " "
+        )
 
     def regenerate_mask_data(self) -> None:
         """Update mask visualization and histograms based on current selection."""
@@ -373,13 +454,22 @@ class SelectionGUI:
         self.labels.data = self.mask_labels
 
         # Update histograms for cells in the cursor
-        features_by_plane = {key: utils.split_planes(value, self.roi_processor.rois_per_plane) for key, value in self.manager.features.items()}
-        idx_cursor_by_plane = utils.split_planes(self.idx_cursor, self.roi_processor.rois_per_plane)
+        features_by_plane = {
+            key: utils.split_planes(value, self.roi_processor.rois_per_plane)
+            for key, value in self.manager.features.items()
+        }
+        idx_cursor_by_plane = utils.split_planes(
+            self.idx_cursor, self.roi_processor.rois_per_plane
+        )
 
         for feature in self.manager.features:
             for iplane in range(self.roi_processor.num_planes):
-                c_feature_values = features_by_plane[feature][iplane][idx_cursor_by_plane[iplane]]
-                self.h_values_cursor[feature][iplane] = np.histogram(c_feature_values, bins=self.h_bin_edges[feature])[0]
+                c_feature_values = features_by_plane[feature][iplane][
+                    idx_cursor_by_plane[iplane]
+                ]
+                self.h_values_cursor[feature][iplane] = np.histogram(
+                    c_feature_values, bins=self.h_bin_edges[feature]
+                )[0]
 
         # Update histogram visualizations
         self.update_feature_plots()
@@ -387,8 +477,12 @@ class SelectionGUI:
     def update_feature_plots(self) -> None:
         """Update the histogram plots for all features."""
         for feature in self.manager.features:
-            self.hist_graphs[feature].setOpts(height=self.h_values_full[feature][self.state.plane_idx])
-            self.hist_cursor[feature].setOpts(height=self.h_values_cursor[feature][self.state.plane_idx])
+            self.hist_graphs[feature].setOpts(
+                height=self.h_values_full[feature][self.state.plane_idx]
+            )
+            self.hist_cursor[feature].setOpts(
+                height=self.h_values_cursor[feature][self.state.plane_idx]
+            )
 
     def update_label_colors(self) -> None:
         """Update the colors of the label visualization."""
@@ -399,8 +493,13 @@ class SelectionGUI:
             colormap = label_colormap(49, 0.5, background_value=0)
         else:
             # Create colormap based on feature values
-            norm = mpl.colors.Normalize(vmin=self.feature_range[color_state_name][0], vmax=self.feature_range[color_state_name][1])
-            colors = plt.colormaps[SelectionConfig.COLORMAPS[self.state.idx_colormap]](norm(self.manager.features[color_state_name]))
+            norm = mpl.colors.Normalize(
+                vmin=self.feature_range[color_state_name][0],
+                vmax=self.feature_range[color_state_name][1],
+            )
+            colors = plt.colormaps[SelectionConfig.COLORMAPS[self.state.idx_colormap]](
+                norm(self.manager.features[color_state_name])
+            )
 
             # Create color dictionary with transparent background
             color_dict = dict(zip(1 + np.arange(self.manager.num_rois), colors))
@@ -412,7 +511,9 @@ class SelectionGUI:
     def update_visibility(self) -> None:
         """Update the visibility of masks and labels."""
         self.masks.visible = self.state.show_mask_image and self.state.mask_visibility
-        self.labels.visible = not self.state.show_mask_image and self.state.mask_visibility
+        self.labels.visible = (
+            not self.state.show_mask_image and self.state.mask_visibility
+        )
 
     def save_selection(self) -> None:
         """Save the current selection state."""
@@ -433,7 +534,9 @@ class SelectionGUI:
             The feature whose plot range is being preserved
         """
         # Temporarily disconnect to prevent recursive calls
-        self.hist_plots[feature].getViewBox().sigYRangeChanged.disconnect(self.preserve_methods[feature])
+        self.hist_plots[feature].getViewBox().sigYRangeChanged.disconnect(
+            self.preserve_methods[feature]
+        )
 
         # Calculate new range
         current_min, current_max = self.hist_plots[feature].viewRange()[1]
@@ -442,7 +545,9 @@ class SelectionGUI:
 
         # Update range and reconnect signal
         self.hist_plots[feature].setYRange(0, new_max)
-        self.hist_plots[feature].getViewBox().sigYRangeChanged.connect(self.preserve_methods[feature])
+        self.hist_plots[feature].getViewBox().sigYRangeChanged.connect(
+            self.preserve_methods[feature]
+        )
 
     def _update_cutoff_finished(self, event: Event, feature: str) -> None:
         """Handle completion of cutoff line movement.
@@ -455,7 +560,12 @@ class SelectionGUI:
             The feature whose cutoff was updated
         """
         # Get and sort cutoff values
-        cutoff_values = sorted([self.cutoff_lines[feature][0].pos()[0], self.cutoff_lines[feature][1].pos()[0]])
+        cutoff_values = sorted(
+            [
+                self.cutoff_lines[feature][0].pos()[0],
+                self.cutoff_lines[feature][1].pos()[0],
+            ]
+        )
         self.feature_cutoffs[feature] = cutoff_values
 
         # Update UI elements
@@ -503,11 +613,15 @@ class SelectionGUI:
         if is_active:
             button.setText(self._get_cutoff_toggle_text(feature, iminmax, True))
             button.setStyleSheet(SelectionConfig.STYLES["UNCHECKED"])
-            self.cutoff_lines[feature][iminmax].setValue(self.feature_cutoffs[feature][iminmax])
+            self.cutoff_lines[feature][iminmax].setValue(
+                self.feature_cutoffs[feature][iminmax]
+            )
         else:
             button.setText(self._get_cutoff_toggle_text(feature, iminmax, False))
             button.setStyleSheet(SelectionConfig.STYLES["CHECKED"])
-            self.cutoff_lines[feature][iminmax].setValue(self.feature_range[feature][iminmax])
+            self.cutoff_lines[feature][iminmax].setValue(
+                self.feature_range[feature][iminmax]
+            )
 
     def _update_criteria(self, feature: str) -> None:
         """Update selection criteria for a feature.
@@ -523,7 +637,10 @@ class SelectionGUI:
 
         # Create criteria
         min_cutoff, max_cutoff = sorted(cutoff_values)
-        criteria = [min_cutoff if cutoff_active[0] else None, max_cutoff if cutoff_active[1] else None]
+        criteria = [
+            min_cutoff if cutoff_active[0] else None,
+            max_cutoff if cutoff_active[1] else None,
+        ]
 
         # Update manager and visualization
         self.manager.update_criteria(feature, criteria)
@@ -532,9 +649,13 @@ class SelectionGUI:
     def _toggle_cells_to_view(self, event: Event) -> None:
         """Toggle between showing control and target cells."""
         self.state.toggle_cell_view()
-        self.buttons["toggle_cells"].setText("Control Cells" if self.state.show_control_cells else "Target Cells")
+        self.buttons["toggle_cells"].setText(
+            "Control Cells" if self.state.show_control_cells else "Target Cells"
+        )
         self.regenerate_mask_data()
-        self.update_text(f"Now viewing {'control' if self.state.show_control_cells else 'target'} cells")
+        self.update_text(
+            f"Now viewing {'control' if self.state.show_control_cells else 'target'} cells"
+        )
 
     def _single_click_label(self, layer: Layer, event: Event) -> None:
         """Handle single-click events on labels.
@@ -560,7 +681,10 @@ class SelectionGUI:
 
         # Get ROI data and format feature information
         roi_idx = label_idx - 1
-        feature_info = [f"{feature}={fvalue[roi_idx]:.3f}" for feature, fvalue in self.manager.features.items()]
+        feature_info = [
+            f"{feature}={fvalue[roi_idx]:.3f}"
+            for feature, fvalue in self.manager.features.items()
+        ]
 
         status_message = f"ROI: {roi_idx} " + " ".join(feature_info)
 
@@ -586,7 +710,9 @@ class SelectionGUI:
             return
 
         if not self.state.use_manual_labels:
-            self.update_text("Can only manually select cells when manual labels are being used!")
+            self.update_text(
+                "Can only manually select cells when manual labels are being used!"
+            )
             return
 
         # Get click location and label
@@ -617,15 +743,21 @@ class SelectionGUI:
         if "Control" in event.modifiers:
             if self.state.only_manual_labels:
                 self.manager.manual_label_active[roi_idx] = False
-                self.update_text(f"You just removed the manual label from ROI: {roi_idx}")
+                self.update_text(
+                    f"You just removed the manual label from ROI: {roi_idx}"
+                )
             else:
-                self.update_text("You can only remove a label if you are only looking at manual labels!")
+                self.update_text(
+                    "You can only remove a label if you are only looking at manual labels!"
+                )
         else:
             # Label as target if showing controls, and vice versa
             new_label = copy(bool(self.state.show_control_cells))
             self.manager.manual_label[roi_idx] = new_label
             self.manager.manual_label_active[roi_idx] = True
-            self.update_text(f"You just labeled ROI: {roi_idx} with the identity: {new_label}")
+            self.update_text(
+                f"You just labeled ROI: {roi_idx} with the identity: {new_label}"
+            )
 
         self.regenerate_mask_data()
 
@@ -633,10 +765,16 @@ class SelectionGUI:
         """Toggle the use of manual labels."""
         self.state.use_manual_labels = not self.state.use_manual_labels
 
-        self.buttons["use_manual_labels"].setText("Using Manual Labels" if self.state.use_manual_labels else "Ignoring Manual Labels")
+        self.buttons["use_manual_labels"].setText(
+            "Using Manual Labels"
+            if self.state.use_manual_labels
+            else "Ignoring Manual Labels"
+        )
 
         self.regenerate_mask_data()
-        self.update_text(f"{'Using' if self.state.use_manual_labels else 'Ignoring'} manual labels")
+        self.update_text(
+            f"{'Using' if self.state.use_manual_labels else 'Ignoring'} manual labels"
+        )
 
     def _show_manual_labels(self, event: Event) -> None:
         """Toggle between showing all labels or only manual labels."""
@@ -645,10 +783,16 @@ class SelectionGUI:
         if self.state.only_manual_labels:
             self.state.use_manual_labels = True
 
-        self.buttons["show_manual"].setText("Only Manual Labels" if self.state.only_manual_labels else "All Labels")
+        self.buttons["show_manual"].setText(
+            "Only Manual Labels" if self.state.only_manual_labels else "All Labels"
+        )
 
         self.regenerate_mask_data()
-        self.update_text("Only showing manual labels" if self.state.only_manual_labels else "Showing all labels")
+        self.update_text(
+            "Only showing manual labels"
+            if self.state.only_manual_labels
+            else "Showing all labels"
+        )
 
     def _clear_manual_labels(self, event: Event) -> None:
         """Clear all manual labels with confirmation check."""
@@ -659,26 +803,38 @@ class SelectionGUI:
             self.regenerate_mask_data()
             self.update_text("You just cleared all manual labels!")
         else:
-            self.update_text("Clearing manual labels requires a control click for safety! Try again.")
+            self.update_text(
+                "Clearing manual labels requires a control click for safety! Try again."
+            )
 
     def _next_color_state(self, event: Event) -> None:
         """Cycle through color states for visualization."""
-        self.state.color_state = (self.state.color_state + 1) % len(self.color_state_names)
+        self.state.color_state = (self.state.color_state + 1) % len(
+            self.color_state_names
+        )
         self.buttons["color"].setText(self.color_state_names[self.state.color_state])
         self.update_label_colors()
-        self.update_text(f"Now coloring by {self.color_state_names[self.state.color_state]}")
+        self.update_text(
+            f"Now coloring by {self.color_state_names[self.state.color_state]}"
+        )
 
     def _next_colormap(self, event: Event) -> None:
         """Cycle through available colormaps."""
-        self.state.idx_colormap = (self.state.idx_colormap + 1) % len(SelectionConfig.COLORMAPS)
-        self.buttons["colormap"].setText(SelectionConfig.COLORMAPS[self.state.idx_colormap])
+        self.state.idx_colormap = (self.state.idx_colormap + 1) % len(
+            SelectionConfig.COLORMAPS
+        )
+        self.buttons["colormap"].setText(
+            SelectionConfig.COLORMAPS[self.state.idx_colormap]
+        )
         self.update_label_colors()
 
     def _switch_image_label(self, event: Event) -> None:
         """Toggle between mask image and label visualization."""
         self.state.toggle_mask_type()
         self.update_visibility()
-        self.update_text(f"Now showing {'mask image' if self.state.show_mask_image else 'mask labels'}")
+        self.update_text(
+            f"Now showing {'mask image' if self.state.show_mask_image else 'mask labels'}"
+        )
 
     def _update_mask_visibility(self, event: Event) -> None:
         """Toggle overall mask visibility."""

@@ -100,7 +100,9 @@ class GUIComponentFactory:
         return button, proxy
 
     @staticmethod
-    def create_histogram(data: np.ndarray, bins: np.ndarray, color: Optional[str] = None) -> pg.BarGraphItem:
+    def create_histogram(
+        data: np.ndarray, bins: np.ndarray, color: Optional[str] = None
+    ) -> pg.BarGraphItem:
         """Creates a histogram bar graph."""
         bar_width = np.diff(bins[:2])
         bin_centers = bins[:-1] + bar_width / 2

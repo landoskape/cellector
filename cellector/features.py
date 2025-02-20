@@ -1,5 +1,11 @@
 from typing import List
-from .utils import phase_correlation_zero, dot_product, compute_correlation, in_vs_out, surround_filter
+from .utils import (
+    phase_correlation_zero,
+    dot_product,
+    compute_correlation,
+    in_vs_out,
+    surround_filter,
+)
 from .filters import filter
 
 
@@ -41,11 +47,19 @@ def compute_phase_correlation(roi_processor):
     centered_references = roi_processor.centered_references
 
     # Window the centered masks and references
-    windowed_masks = filter(centered_masks, "window", kernel=roi_processor.parameters["window_kernel"])
-    windowed_references = filter(centered_references, "window", kernel=roi_processor.parameters["window_kernel"])
+    windowed_masks = filter(
+        centered_masks, "window", kernel=roi_processor.parameters["window_kernel"]
+    )
+    windowed_references = filter(
+        centered_references, "window", kernel=roi_processor.parameters["window_kernel"]
+    )
 
     # Phase correlation requires windowing
-    return phase_correlation_zero(windowed_masks, windowed_references, eps=roi_processor.parameters["phase_corr_eps"])
+    return phase_correlation_zero(
+        windowed_masks,
+        windowed_references,
+        eps=roi_processor.parameters["phase_corr_eps"],
+    )
 
 
 def compute_dot_product(roi_processor):
@@ -85,7 +99,9 @@ def compute_corr_coef(roi_processor):
     centered_masks = roi_processor.centered_masks
     filtered_centered_references = roi_processor.filtered_centered_references
     iterations = roi_processor.parameters["surround_iterations"]
-    masks_surround, references_surround = surround_filter(centered_masks, filtered_centered_references, iterations=iterations)
+    masks_surround, references_surround = surround_filter(
+        centered_masks, filtered_centered_references, iterations=iterations
+    )
     return compute_correlation(masks_surround, references_surround)
 
 
@@ -122,7 +138,14 @@ PIPELINE_METHODS = dict(
 PIPELINE_DEPENDENCIES = dict(
     phase_corr=["centered_width", "centroid_method", "window_kernel", "phase_corr_eps"],
     dot_product=["lowcut", "highcut", "order"],
-    corr_coef=["surround_iterations", "centered_width", "centroid_method", "lowcut", "highcut", "order"],
+    corr_coef=[
+        "surround_iterations",
+        "centered_width",
+        "centroid_method",
+        "lowcut",
+        "highcut",
+        "order",
+    ],
     in_vs_out=["surround_iterations", "centered_width", "centroid_method"],
 )
 

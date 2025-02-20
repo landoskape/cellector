@@ -7,7 +7,9 @@ from .roi_processor import RoiProcessor
 
 
 class CellectorManager:
-    def __init__(self, root_dir: Union[Path, str], exclude_features: Optional[List[str]] = None):
+    def __init__(
+        self, root_dir: Union[Path, str], exclude_features: Optional[List[str]] = None
+    ):
         """Initialize CellectorManager.
 
         Parameters
@@ -34,14 +36,18 @@ class CellectorManager:
 
         # Load or initialize manual selection data
         if io.is_manual_selection_saved(self.root_dir):
-            self.manual_label, self.manual_label_active = io.load_manual_selection(self.root_dir)
+            self.manual_label, self.manual_label_active = io.load_manual_selection(
+                self.root_dir
+            )
         else:
             # Initial state is for manual labels to all be set to False, but for none of them to be active
             self.manual_label = np.zeros(self.num_rois, dtype=bool)
             self.manual_label_active = np.zeros(self.num_rois, dtype=bool)
 
     @classmethod
-    def make_from_roi_processor(cls, roi_processor: RoiProcessor, exclude_features: Optional[List[str]] = None) -> "CellectorManager":
+    def make_from_roi_processor(
+        cls, roi_processor: RoiProcessor, exclude_features: Optional[List[str]] = None
+    ) -> "CellectorManager":
         """Create a CellectorManager from an existing RoiProcessor.
 
         CellectorManager is usually initialized from disk, but this method allows the
@@ -82,7 +88,9 @@ class CellectorManager:
             self.num_rois = feature_values.shape[0]
 
         if feature_values.shape[0] != self.num_rois or feature_values.ndim != 1:
-            raise ValueError(f"Feature array has incorrect number of ROIs! Expected {self.num_rois}, received {feature_values.shape[0]}.")
+            raise ValueError(
+                f"Feature array has incorrect number of ROIs! Expected {self.num_rois}, received {feature_values.shape[0]}."
+            )
 
         self.features[feature_name] = feature_values
 
@@ -112,7 +120,9 @@ class CellectorManager:
         """Compute the index of cells that are selected."""
         self.compute_idx_meets_criteria()
         idx_selected = copy(self.idx_meets_criteria)
-        idx_selected[self.manual_label_active] = self.manual_label[self.manual_label_active]
+        idx_selected[self.manual_label_active] = self.manual_label[
+            self.manual_label_active
+        ]
         return idx_selected
 
     def update_criteria(self, feature: str, criterion: Union[List, np.ndarray]):
@@ -126,13 +136,23 @@ class CellectorManager:
             Array of shape (2,) with the minimum and maximum criteria or None for no criteria.
         """
         if feature not in self.features or feature not in self.criteria:
-            raise ValueError(f"Feature {feature} not found in the feature/criteria lists!")
+            raise ValueError(
+                f"Feature {feature} not found in the feature/criteria lists!"
+            )
 
         if len(criterion) != 2:
-            raise ValueError(f"Criterion should be a list or numpy array with shape (2,)")
+            raise ValueError(
+                f"Criterion should be a list or numpy array with shape (2,)"
+            )
 
-        if criterion[0] is not None and criterion[1] is not None and criterion[0] > criterion[1]:
-            raise ValueError(f"Minimum criterion should be less than maximum criterion!")
+        if (
+            criterion[0] is not None
+            and criterion[1] is not None
+            and criterion[0] > criterion[1]
+        ):
+            raise ValueError(
+                f"Minimum criterion should be less than maximum criterion!"
+            )
 
         self.criteria[feature] = np.array(criterion)
         self.compute_idx_meets_criteria()  # Update this to reflect the new change
@@ -164,7 +184,9 @@ class CellectorManager:
 
     def save_manual_selection(self):
         """Save the manual selection labels to disk."""
-        io.save_manual_selection(self.root_dir, self.manual_label, self.manual_label_active)
+        io.save_manual_selection(
+            self.root_dir, self.manual_label, self.manual_label_active
+        )
 
     def save_idx_selected(self):
         """Save the indices of selected ROIs to disk."""
