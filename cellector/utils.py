@@ -74,12 +74,14 @@ def transpose(sequence: Sequence) -> List:
     Examples
     --------
     To transpose a list of lists:
+
     >>> transpose([[1, 2, 3], [4, 5, 6]])
     [[1, 4], [2, 5], [3, 6]]
 
     If you perform a function that outputs tuples in a list comprehension, but want to
     organize the results by the elements of the tuple rather than the iterable on the
     list comprehension:
+
     >>> def func(x):
     ...     return x, x ** 2
     >>> results = [func(i) for i in range(3)]
@@ -624,7 +626,9 @@ def cross_power_spectrum(
     """Measure the cross-power spectrum between two images.
 
     Computes the cross-power spectrum in the fourier domain with the following formula:
+
     .. math::
+
         R = F(static\_image) * conj(F(moving\_image))
 
     where F is the fourier transform and conj is the complex conjugate.
@@ -663,7 +667,9 @@ def phase_correlation(
     """Measure the phase correlation between two images.
 
     Computes the phase correlation in the fourier domain with the following formula:
+
     .. math::
+
         R = F^{-1}(F(static\_image) * conj(F(moving\_image)))
 
     where F is the fourier transform and conj is the complex conjugate.
@@ -700,7 +706,9 @@ def phase_correlation_zero(
     """Measure the zero-offset phase correlation between two images.
 
     Computes the phase correlation in the fourier domain with the following formula:
+
     .. math::
+
         R = F^{-1}(F(static\_image) * conj(F(moving\_image)))
 
     where F is the fourier transform and conj is the complex conjugate. Returns the
