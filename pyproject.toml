@@ -28,9 +28,5 @@ dependencies = [
 "Homepage" = "https://github.com/landoskape/cellector"
 "Bug Tracker" = "https://github.com/landoskape/cellector/issues"
 
-# Reminder to self:
-# For each new release, go to package folder and run:
-# python -m build
-# python -m pip install --upgrade twine
-# python -m twine upload --repository testpypi dist/* 
-# python -m twine upload --repository pypi dist/* 
+[tool.black]
+line-length = 88
