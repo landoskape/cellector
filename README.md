@@ -44,13 +44,14 @@ The basic workflow of this package is as follows:
 4. Repeat (or use scripting to speed up).
 
 If you want to see the basic workflow in a notebook, look [here](https://github.com/landoskape/cellector/blob/main/notebooks/tutorial.ipynb).
-Otherwise, read the instructions below or look at the [documentation](https://github.com/landoskape/cellector/blob/main/docs/examples.md)
-which is very far from complete at the moment. 
+Otherwise, read the instructions below or look at the [documentation](https://cellector.readthedocs.io/). 
 
 ### Basic instructions
 We've provided a few functions to make ``RoiProcessor`` objects that work differently
-depending on what kind of data you are starting with. For an exhaustive list, go
-[here](https://github.com/landoskape/cellector/blob/main/docs/examples.md). If you are working directly on the output of suite2p, use:
+depending on what kind of data you are starting with. For an exhaustive list, check out
+the explanation in the documentation files [here](https://cellector.readthedocs.io/en/latest/examples.html).
+
+If you are working directly on the output of suite2p, use:
 ```python
 from cellector.io import create_from_suite2p
 suite2p_dir = # define your suite2p path - the one with plane0, plane1, ... in it
@@ -63,7 +64,7 @@ from cellector.gui import SelectionGUI
 gui = SelectionGUI(roi_processor)
 ```
 
-Then, use the GUI and hit save! Instructions for the GUI are [here](https://github.com/landoskape/cellector/blob/main/docs/gui.md).
+Then, use the GUI and hit save! Instructions for the GUI are [here](https://cellector.readthedocs.io/en/latest/gui.html).
 
 ### Scripting
 The GUI works, but it can be a bit tedious to open it over and over again when you know
