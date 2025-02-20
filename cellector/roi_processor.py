@@ -2,7 +2,6 @@ from typing import List, Optional, Dict, Union
 from pathlib import Path
 from copy import deepcopy
 import numpy as np
-from . import io
 from . import utils
 from .filters import filter
 from .features import FeaturePipeline, standard_pipelines
@@ -90,19 +89,6 @@ class RoiProcessor:
         Mapping of feature pipeline names to dependencies on attributes of roi_processor instances.
     parameters : dict
         Dictionary containing all the preprocessing parameters used.
-
-    Methods
-    -------
-    compute_features(use_saved=True)
-        Compute all registered features for each ROI
-    add_feature(name, values)
-        Add or update a feature
-    register_feature_pipeline(pipeline)
-        Register a new feature computation pipeline
-    update_parameters(**kwargs)
-        Update processing parameters
-    copy_with_params(params)
-        Create new instance with modified parameters
     """
 
     def __init__(
@@ -267,10 +253,12 @@ class RoiProcessor:
         use_saved : bool, optional
             If True, will attempt to load saved features from disk if they exist. Default is True.
         """
+        from .io.base import load_feature, is_feature_saved
+
         for name, method in self.feature_pipeline_methods.items():
             if use_saved:
-                if io.is_feature_saved(self.root_dir, name):
-                    value = io.load_feature(self.root_dir, name)
+                if is_feature_saved(self.root_dir, name):
+                    value = load_feature(self.root_dir, name)
                     if len(value) == self.num_rois:
                         self.add_feature(name, value)
                         # Skip recomputing the feature and move to next one
@@ -289,6 +277,8 @@ class RoiProcessor:
         values : np.ndarray
             Feature values for each ROI. Must have the same length as the number of ROIs across all planes.
         """
+        from .io.base import save_feature
+
         if len(values) != self.num_rois:
             raise ValueError(
                 f"Length of feature values ({len(values)}) for feature {name} must match number of ROIs ({self.num_rois})"
@@ -296,7 +286,7 @@ class RoiProcessor:
         self.features[name] = values  # cache the feature values
         if self.save_features:
             # save to disk if requested
-            io.save_feature(self.root_dir, name, values)
+            save_feature(self.root_dir, name, values)
 
     def register_feature_pipeline(self, pipeline: FeaturePipeline):
         """Register a feature pipeline with the RoiProcessor instance.
