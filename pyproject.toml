@@ -24,8 +24,8 @@ dependencies = [
     "napari[all]",
 ]
 
-[tool.setuptools.dynamic]
-version = {attr = "cellector.__version__"}
+[tool.hatch.version]
+path = "cellector/__init__.py"
 
 [project.urls]
 "Homepage" = "https://github.com/landoskape/cellector"
