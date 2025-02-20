@@ -1,9 +1,10 @@
 # cellector
 [![PyPI version](https://badge.fury.io/py/syd.svg)](https://badge.fury.io/py/syd)
-<!-- [![Tests](https://github.com/landoskape/syd/actions/workflows/tests.yml/badge.svg)](https://github.com/landoskape/syd/actions/workflows/tests.yml) -->
-[![Documentation Status](https://readthedocs.org/projects/shareyourdata/badge/?version=stable)](https://shareyourdata.readthedocs.io/en/stable/?badge=stable)
-<!-- [![codecov](https://codecov.io/gh/landoskape/syd/branch/main/graph/badge.svg)](https://codecov.io/gh/landoskape/syd) -->
+[![Documentation Status](https://readthedocs.org/projects/cellector/badge/?version=stable)](https://cellector.readthedocs.io/en/stable/?badge=stable)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+<!-- [![Tests](https://github.com/landoskape/syd/actions/workflows/tests.yml/badge.svg)](https://github.com/landoskape/syd/actions/workflows/tests.yml) -->
+<!-- [![codecov](https://codecov.io/gh/landoskape/syd/branch/main/graph/badge.svg)](https://codecov.io/gh/landoskape/syd) -->
 
 A pipeline and GUI for determining which ROIs match features in a fluorescence image. It
 is a common challenge in biology to determine whether a particular ROI (i.e. a collection
