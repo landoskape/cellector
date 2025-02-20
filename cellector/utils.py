@@ -74,12 +74,14 @@ def transpose(sequence: Sequence) -> List:
     Examples
     --------
     To transpose a list of lists:
+
     >>> transpose([[1, 2, 3], [4, 5, 6]])
     [[1, 4], [2, 5], [3, 6]]
 
     If you perform a function that outputs tuples in a list comprehension, but want to
     organize the results by the elements of the tuple rather than the iterable on the
     list comprehension:
+
     >>> def func(x):
     ...     return x, x ** 2
     >>> results = [func(i) for i in range(3)]
@@ -166,10 +168,15 @@ def split_planes(sequence: Sequence, num_per_plane: List[int]):
     lists for each plane after operations have been performed on all ROIs at once
     using the cat_planes function.
     """
-    return [sequence[sum(num_per_plane[:i]) : sum(num_per_plane[: i + 1])] for i in range(len(num_per_plane))]
+    return [
+        sequence[sum(num_per_plane[:i]) : sum(num_per_plane[: i + 1])]
+        for i in range(len(num_per_plane))
+    ]
 
 
-def flatten_roi_data(lam: List[np.ndarray], ypix: List[np.ndarray], xpix: List[np.ndarray]):
+def flatten_roi_data(
+    lam: List[np.ndarray], ypix: List[np.ndarray], xpix: List[np.ndarray]
+):
     """Get flattened ROI data for use in parallel processing.
 
     Returns flattened arrays for intensity values, y-coordinates, x-coordinates in which
@@ -199,7 +206,13 @@ def flatten_roi_data(lam: List[np.ndarray], ypix: List[np.ndarray], xpix: List[n
     return lam_flat, ypix_flat, xpix_flat, roi_idx
 
 
-def get_roi_centroid(lam: np.ndarray, ypix: np.ndarray, xpix: np.ndarray, method: str = "weightedmean", asint: bool = True):
+def get_roi_centroid(
+    lam: np.ndarray,
+    ypix: np.ndarray,
+    xpix: np.ndarray,
+    method: str = "weightedmean",
+    asint: bool = True,
+):
     """Calculate the centroid coordinates of an ROI.
 
     Parameters
@@ -233,11 +246,19 @@ def get_roi_centroid(lam: np.ndarray, ypix: np.ndarray, xpix: np.ndarray, method
         yc = int(np.median(ypix))
         xc = int(np.median(xpix))
     else:
-        raise ValueError(f"Invalid method ({method}). Must be 'weightedmean' or 'median'")
+        raise ValueError(
+            f"Invalid method ({method}). Must be 'weightedmean' or 'median'"
+        )
     return yc, xc
 
 
-def get_roi_centroids(lam: List[np.ndarray], ypix: List[np.ndarray], xpix: List[np.ndarray], method: str = "weightedmean", asint: bool = True):
+def get_roi_centroids(
+    lam: List[np.ndarray],
+    ypix: List[np.ndarray],
+    xpix: List[np.ndarray],
+    method: str = "weightedmean",
+    asint: bool = True,
+):
     """Get the centroid of each ROI in a list of ROIs.
 
     Parameters
@@ -266,12 +287,22 @@ def get_roi_centroids(lam: List[np.ndarray], ypix: List[np.ndarray], xpix: List[
     --------
     get_roi_centroid : The underlying function for centroid calculation.
     """
-    centroids = [get_roi_centroid(l, y, x, method=method, asint=asint) for (l, y, x) in zip(lam, ypix, xpix)]
+    centroids = [
+        get_roi_centroid(l, y, x, method=method, asint=asint)
+        for (l, y, x) in zip(lam, ypix, xpix)
+    ]
     yc, xc = transpose(centroids)
     return yc, xc
 
 
-def get_mask_volume(lam: np.ndarray, ypix: np.ndarray, xpix: np.ndarray, roi_idx: np.ndarray, num_rois: int, shape: Tuple[int, int]):
+def get_mask_volume(
+    lam: np.ndarray,
+    ypix: np.ndarray,
+    xpix: np.ndarray,
+    roi_idx: np.ndarray,
+    num_rois: int,
+    shape: Tuple[int, int],
+):
     """Create a mask stack using Numba for parallel processing.
 
     For optimization with numba, the input is flattened arrays of pixel coordinates and intensities
@@ -366,19 +397,28 @@ def get_centered_masks(
         A 3D stack of centered masks for each ROI with shape (num_rois, 2 * width + 1, 2 * width + 1).
     """
     yc, xc = centroids
-    mask_stack = _nb_get_centered_masks(lam, ypix, xpix, roi_idx, yc, xc, width, fill_value)
+    mask_stack = _nb_get_centered_masks(
+        lam, ypix, xpix, roi_idx, yc, xc, width, fill_value
+    )
     return mask_stack
 
 
 @nb.njit(parallel=True)
 def _nb_get_centered_masks(lam, ypix, xpix, roi_idx, yc, xc, width, fill_value):
     """Create a stack of centered masks for each ROI using Numba for parallel processing."""
-    mask_stack = np.full((len(yc), 2 * width + 1, 2 * width + 1), fill_value, dtype=np.float32)
+    mask_stack = np.full(
+        (len(yc), 2 * width + 1, 2 * width + 1), fill_value, dtype=np.float32
+    )
     for idx in nb.prange(len(lam)):
         c_yc, c_xc = yc[roi_idx[idx]], xc[roi_idx[idx]]
         cyidx = ypix[idx] - c_yc + width
         cxidx = xpix[idx] - c_xc + width
-        if cyidx >= 0 and cyidx < 2 * width + 1 and cxidx >= 0 and cxidx < 2 * width + 1:
+        if (
+            cyidx >= 0
+            and cyidx < 2 * width + 1
+            and cxidx >= 0
+            and cxidx < 2 * width + 1
+        ):
             mask_stack[roi_idx[idx], cyidx, cxidx] = lam[idx]
     return mask_stack
 
@@ -490,15 +530,23 @@ def get_centered_references(
 
     # Preallocate reference stack array
     num_rois = len(plane_idx)
-    ref_stack = np.full((num_rois, 2 * width + 1, 2 * width + 1), fill_value, dtype=np.float32)
+    ref_stack = np.full(
+        (num_rois, 2 * width + 1, 2 * width + 1), fill_value, dtype=np.float32
+    )
 
     # For each ROI, fill in a patch of the appropriate reference image into the centered_stack array
     for idx in range(num_rois):
-        ystart, yend, ystart_offset, yend_offset = _get_roi_bounds(yc[idx], width, references[plane_idx[idx]].shape[0])
-        xstart, xend, xstart_offset, xend_offset = _get_roi_bounds(xc[idx], width, references[plane_idx[idx]].shape[1])
+        ystart, yend, ystart_offset, yend_offset = _get_roi_bounds(
+            yc[idx], width, references[plane_idx[idx]].shape[0]
+        )
+        xstart, xend, xstart_offset, xend_offset = _get_roi_bounds(
+            xc[idx], width, references[plane_idx[idx]].shape[1]
+        )
         y_centered_slice = slice(ystart_offset, 2 * width + 1 + yend_offset)
         x_centered_slice = slice(xstart_offset, 2 * width + 1 + xend_offset)
-        ref_stack[idx, y_centered_slice, x_centered_slice] = references[plane_idx[idx]][ystart:yend, xstart:xend]
+        ref_stack[idx, y_centered_slice, x_centered_slice] = references[plane_idx[idx]][
+            ystart:yend, xstart:xend
+        ]
     return ref_stack
 
 
@@ -526,14 +574,24 @@ def center_surround(centered_masks: np.ndarray, iterations: Optional[int] = 7):
     center = np.where(centered_masks > 0, 1, 0)
 
     # This structuring element allows parallelization across ROIs without interference
-    stack_structure = np.stack((np.zeros((3, 3), dtype=bool), generate_binary_structure(2, 1), np.zeros((3, 3), dtype=bool)))
+    stack_structure = np.stack(
+        (
+            np.zeros((3, 3), dtype=bool),
+            generate_binary_structure(2, 1),
+            np.zeros((3, 3), dtype=bool),
+        )
+    )
     surround = binary_dilation(center, structure=stack_structure, iterations=iterations)
 
     # Return as boolean arrays for use in indices and as masks
     return center.astype(bool), surround.astype(bool)
 
 
-def surround_filter(centered_masks: np.ndarray, centered_references: np.ndarray, iterations: Optional[int] = 7):
+def surround_filter(
+    centered_masks: np.ndarray,
+    centered_references: np.ndarray,
+    iterations: Optional[int] = 7,
+):
     """Filter centered masks and references to include only the surround region of each mask.
 
     Uses the center_surround function to calculate the center and surround footprints, which
@@ -562,11 +620,15 @@ def surround_filter(centered_masks: np.ndarray, centered_references: np.ndarray,
     return masks_surround, references_surround
 
 
-def cross_power_spectrum(static_image: np.ndarray, moving_image: np.ndarray, eps: float = 1e6):
+def cross_power_spectrum(
+    static_image: np.ndarray, moving_image: np.ndarray, eps: float = 1e6
+):
     """Measure the cross-power spectrum between two images.
 
     Computes the cross-power spectrum in the fourier domain with the following formula:
+
     .. math::
+
         R = F(static\_image) * conj(F(moving\_image))
 
     where F is the fourier transform and conj is the complex conjugate.
@@ -599,11 +661,15 @@ def cross_power_spectrum(static_image: np.ndarray, moving_image: np.ndarray, eps
     return R
 
 
-def phase_correlation(static_image: np.ndarray, moving_image: np.ndarray, eps: float = 1e-8):
+def phase_correlation(
+    static_image: np.ndarray, moving_image: np.ndarray, eps: float = 1e-8
+):
     """Measure the phase correlation between two images.
 
     Computes the phase correlation in the fourier domain with the following formula:
+
     .. math::
+
         R = F^{-1}(F(static\_image) * conj(F(moving\_image)))
 
     where F is the fourier transform and conj is the complex conjugate.
@@ -634,11 +700,15 @@ def phase_correlation(static_image: np.ndarray, moving_image: np.ndarray, eps: f
     return np.fft.ifft2(R).real
 
 
-def phase_correlation_zero(centered_masks: np.ndarray, centered_reference: np.ndarray, eps: float = 1e6):
+def phase_correlation_zero(
+    centered_masks: np.ndarray, centered_reference: np.ndarray, eps: float = 1e6
+):
     """Measure the zero-offset phase correlation between two images.
 
     Computes the phase correlation in the fourier domain with the following formula:
+
     .. math::
+
         R = F^{-1}(F(static\_image) * conj(F(moving\_image)))
 
     where F is the fourier transform and conj is the complex conjugate. Returns the
@@ -673,7 +743,9 @@ def phase_correlation_zero(centered_masks: np.ndarray, centered_reference: np.nd
     return center_value.real
 
 
-def in_vs_out(centered_masks: np.ndarray, centered_reference: np.ndarray, iterations: int = 7):
+def in_vs_out(
+    centered_masks: np.ndarray, centered_reference: np.ndarray, iterations: int = 7
+):
     """Measure the ratio of the intensity inside the mask to the local intensity surrounding the mask.
 
     The intensity inside the mask is the sum of the reference image inside the mask, and the
@@ -707,7 +779,13 @@ def in_vs_out(centered_masks: np.ndarray, centered_reference: np.ndarray, iterat
     return inside_sum / (inside_sum + outside_sum)
 
 
-def dot_product(lam: List[np.ndarray], ypix: List[np.ndarray], xpix: List[np.ndarray], plane_idx: List, reference: np.ndarray):
+def dot_product(
+    lam: List[np.ndarray],
+    ypix: List[np.ndarray],
+    xpix: List[np.ndarray],
+    plane_idx: List,
+    reference: np.ndarray,
+):
     """Measure the normalized dot product between the masks and the reference images.
 
     Will take the inner product of the mask weights with the reference image, and divide
@@ -811,4 +889,11 @@ def compute_correlation(centered_masks: np.ndarray, centered_references: np.ndar
     s_ref = np.nanstd(centered_references, axis=(-2, -1))
     s_mask = np.nanstd(centered_masks, axis=(-2, -1))
     N = np.sum(~np.isnan(centered_masks), axis=(-2, -1))
-    return np.nansum((centered_references - u_ref) * (centered_masks - u_mask), axis=(-2, -1)) / N / s_ref / s_mask
+    return (
+        np.nansum(
+            (centered_references - u_ref) * (centered_masks - u_mask), axis=(-2, -1)
+        )
+        / N
+        / s_ref
+        / s_mask
+    )

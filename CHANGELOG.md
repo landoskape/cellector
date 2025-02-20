@@ -1,10 +1,33 @@
-
 # Change Log
 All notable changes to this project will be documented in this file.
  
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
  
+## [1.0.1] - 2025-02-20
+
+### Added
+- Added Sphinx documentation infrastructure
+  - New docs directory with comprehensive API reference
+  - Added ReadTheDocs configuration
+  - Added documentation requirements
+  - Converted GUI documentation from markdown to RST
+  - Added How It Works and Quickstart guides
+
+### Changed
+- Changed black line length from 150 to 88 characters
+  - Updated .github/workflows/black.yml configuration
+  - Added pyproject.toml black configuration
+- Improved code formatting throughout codebase to match new line length
+- Restructured documentation
+  - Moved examples.md to RST format
+  - Reorganized documentation files into source directory
+  - Added proper RST documentation structure
+
+### Removed
+- Removed examples.md in favor of RST version
+- Removed build reminder comments from pyproject.toml
+
 ## [1.0.0] - 2024-12-17
 
 > ⚠️ **BREAKING CHANGES WARNING** ⚠️

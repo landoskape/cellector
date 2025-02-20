@@ -2,7 +2,6 @@ from typing import List, Optional, Dict, Union
 from pathlib import Path
 from copy import deepcopy
 import numpy as np
-from . import io
 from . import utils
 from .filters import filter
 from .features import FeaturePipeline, standard_pipelines
@@ -27,9 +26,23 @@ DEFAULT_PARAMETERS = dict(
 # Mapping of parameters to cache entries that are affected by the change
 PARAM_CACHE_MAPPING = dict(
     surround_iterations=[],
-    fill_value=["centered_masks", "centered_references", "filtered_centered_references"],
-    centered_width=["centered_masks", "centered_references", "filtered_centered_references"],
-    centroid_method=["yc", "xc", "centered_masks", "centered_references", "filtered_centered_references"],
+    fill_value=[
+        "centered_masks",
+        "centered_references",
+        "filtered_centered_references",
+    ],
+    centered_width=[
+        "centered_masks",
+        "centered_references",
+        "filtered_centered_references",
+    ],
+    centroid_method=[
+        "yc",
+        "xc",
+        "centered_masks",
+        "centered_references",
+        "filtered_centered_references",
+    ],
     window_kernel=[],
     phase_corr_eps=[],
     lowcut=["filtered_centered_references"],
@@ -76,19 +89,6 @@ class RoiProcessor:
         Mapping of feature pipeline names to dependencies on attributes of roi_processor instances.
     parameters : dict
         Dictionary containing all the preprocessing parameters used.
-
-    Methods
-    -------
-    compute_features(use_saved=True)
-        Compute all registered features for each ROI
-    add_feature(name, values)
-        Add or update a feature
-    register_feature_pipeline(pipeline)
-        Register a new feature computation pipeline
-    update_parameters(**kwargs)
-        Update processing parameters
-    copy_with_params(params)
-        Create new instance with modified parameters
     """
 
     def __init__(
@@ -137,11 +137,15 @@ class RoiProcessor:
             Additional parameters to update the default parameters used for preprocessing.
         """
         # Validate input data
-        if not (isinstance(stats, list) or isinstance(stats, np.ndarray)) or not all(isinstance(stat, dict) for stat in stats):
+        if not (isinstance(stats, list) or isinstance(stats, np.ndarray)) or not all(
+            isinstance(stat, dict) for stat in stats
+        ):
             raise TypeError("Stats must be a list or numpy array of dictionaries.")
         for stat in stats:
             if not all(key in stat for key in ["lam", "xpix", "ypix"]):
-                raise ValueError("Each stat dictionary must contain keys 'lam', 'xpix', and 'ypix'")
+                raise ValueError(
+                    "Each stat dictionary must contain keys 'lam', 'xpix', and 'ypix'"
+                )
         if not isinstance(references, np.ndarray) or references.ndim != 3:
             raise TypeError("References must be a 3D numpy array")
         if not isinstance(plane_idx, np.ndarray) or plane_idx.ndim != 1:
@@ -176,11 +180,16 @@ class RoiProcessor:
         for lm, xp, yp in zip(self.lam, self.xpix, self.ypix):
             if not (len(lm) == len(xp) == len(yp)):
                 raise ValueError("Mismatched lengths of mask data")
-        if max(max(x) for x in self.xpix) >= self.lx or max(max(y) for y in self.ypix) >= self.ly:
+        if (
+            max(max(x) for x in self.xpix) >= self.lx
+            or max(max(y) for y in self.ypix) >= self.ly
+        ):
             raise ValueError("Pixel indices exceed image dimensions")
 
         # Store flattened mask data for some optimized implementations
-        lam_flat, ypix_flat, xpix_flat, flat_roi_idx = utils.flatten_roi_data(self.lam, self.ypix, self.xpix)
+        lam_flat, ypix_flat, xpix_flat, flat_roi_idx = utils.flatten_roi_data(
+            self.lam, self.ypix, self.xpix
+        )
         self._lam_flat = lam_flat
         self._ypix_flat = ypix_flat
         self._xpix_flat = xpix_flat
@@ -201,16 +210,26 @@ class RoiProcessor:
             for name, values in extra_features.items():
                 if not isinstance(name, str):
                     raise TypeError("Extra feature values must be a numpy array")
-                if not isinstance(values, list) and not all(isinstance(v, np.ndarray) for v in values):
-                    raise TypeError("Extra feature values must be a list of numpy arrays")
-                if not all(v.ndim == 1 for v in values) or not all(len(v) == nroi for v, nroi in zip(values, self.rois_per_plane)):
-                    raise ValueError("Extra feature values must be 1D numpy arrays with length equal to the number of ROIs for each plane.")
+                if not isinstance(values, list) and not all(
+                    isinstance(v, np.ndarray) for v in values
+                ):
+                    raise TypeError(
+                        "Extra feature values must be a list of numpy arrays"
+                    )
+                if not all(v.ndim == 1 for v in values) or not all(
+                    len(v) == nroi for v, nroi in zip(values, self.rois_per_plane)
+                ):
+                    raise ValueError(
+                        "Extra feature values must be 1D numpy arrays with length equal to the number of ROIs for each plane."
+                    )
                 self.add_feature(name, utils.cat_planes(values))
 
         # Establish preprocessing parameters
         self.parameters = deepcopy(DEFAULT_PARAMETERS)
         if set(kwargs) - set(DEFAULT_PARAMETERS):
-            raise ValueError(f"Invalid parameter(s): {', '.join(set(kwargs) - set(DEFAULT_PARAMETERS))}")
+            raise ValueError(
+                f"Invalid parameter(s): {', '.join(set(kwargs) - set(DEFAULT_PARAMETERS))}"
+            )
         self.parameters.update(kwargs)
 
         # register feature pipelines
@@ -234,10 +253,12 @@ class RoiProcessor:
         use_saved : bool, optional
             If True, will attempt to load saved features from disk if they exist. Default is True.
         """
+        from .io.base import load_feature, is_feature_saved
+
         for name, method in self.feature_pipeline_methods.items():
             if use_saved:
-                if io.is_feature_saved(self.root_dir, name):
-                    value = io.load_feature(self.root_dir, name)
+                if is_feature_saved(self.root_dir, name):
+                    value = load_feature(self.root_dir, name)
                     if len(value) == self.num_rois:
                         self.add_feature(name, value)
                         # Skip recomputing the feature and move to next one
@@ -256,12 +277,16 @@ class RoiProcessor:
         values : np.ndarray
             Feature values for each ROI. Must have the same length as the number of ROIs across all planes.
         """
+        from .io.base import save_feature
+
         if len(values) != self.num_rois:
-            raise ValueError(f"Length of feature values ({len(values)}) for feature {name} must match number of ROIs ({self.num_rois})")
+            raise ValueError(
+                f"Length of feature values ({len(values)}) for feature {name} must match number of ROIs ({self.num_rois})"
+            )
         self.features[name] = values  # cache the feature values
         if self.save_features:
             # save to disk if requested
-            io.save_feature(self.root_dir, name, values)
+            save_feature(self.root_dir, name, values)
 
     def register_feature_pipeline(self, pipeline: FeaturePipeline):
         """Register a feature pipeline with the RoiProcessor instance.
@@ -281,10 +306,17 @@ class RoiProcessor:
         """
         if not isinstance(pipeline, FeaturePipeline):
             raise TypeError("Pipeline must be an instance of FeaturePipeline")
-        if pipeline.name in self.feature_pipeline_methods or pipeline.name in self.feature_pipeline_dependencies:
-            raise ValueError(f"A pipeline called {pipeline.name} has already been registered.")
+        if (
+            pipeline.name in self.feature_pipeline_methods
+            or pipeline.name in self.feature_pipeline_dependencies
+        ):
+            raise ValueError(
+                f"A pipeline called {pipeline.name} has already been registered."
+            )
         if not all(dep in self.parameters for dep in pipeline.dependencies):
-            raise ValueError(f"The following dependencies for pipeline {pipeline.name} not found in parameters ({', '.join(pipeline.dependencies)})")
+            raise ValueError(
+                f"The following dependencies for pipeline {pipeline.name} not found in parameters ({', '.join(pipeline.dependencies)})"
+            )
         self.feature_pipeline_methods[pipeline.name] = pipeline.method
         self.feature_pipeline_dependencies[pipeline.name] = pipeline.dependencies
 
@@ -322,7 +354,10 @@ class RoiProcessor:
         for key, value in kwargs.items():
             if key in self.parameters and self.parameters[key] != value:
                 affected_cache.extend(PARAM_CACHE_MAPPING.get(key, []))
-                for pipeline, dependencies in self.feature_pipeline_dependencies.items():
+                for (
+                    pipeline,
+                    dependencies,
+                ) in self.feature_pipeline_dependencies.items():
                     if key in dependencies:
                         affected_features.append(pipeline)
                 self.parameters[key] = value
@@ -334,7 +369,9 @@ class RoiProcessor:
         # Recompute affected features if they have already been computed
         for feature_key in set(affected_features):
             if feature_key in self.features:
-                self.add_feature(feature_key, self.feature_pipeline_methods[feature_key](self))
+                self.add_feature(
+                    feature_key, self.feature_pipeline_methods[feature_key](self)
+                )
 
     def copy_with_params(self, params: dict):
         """Create a new processor instance with updated parameters.
@@ -460,7 +497,9 @@ class RoiProcessor:
                 highcut=self.parameters["highcut"],
                 order=self.parameters["order"],
             )
-            filtered_references = filter(np.stack(self.references), "butterworth_bpf", **bpf_parameters)
+            filtered_references = filter(
+                np.stack(self.references), "butterworth_bpf", **bpf_parameters
+            )
             self._cache["filtered_references"] = filtered_references
         return self._cache["filtered_references"]
 

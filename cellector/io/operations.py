@@ -23,7 +23,9 @@ def clear_cellector_files(root_dir: Union[Path, str]) -> None:
         save_dir.rmdir()
 
 
-def identify_feature_files(root_dir: Union[Path, str], criteria: bool = True) -> List[str]:
+def identify_feature_files(
+    root_dir: Union[Path, str], criteria: bool = True
+) -> List[str]:
     """Identify cellector features or feature criteria files that are saved in a cellector directory.
 
     Features and feature criteria are saved with a particular convention that makes them
@@ -73,7 +75,9 @@ def propagate_criteria(root_dir: Union[Path, str], *target_dirs: Union[Path, str
     # Load feature criteria names from root_dir
     criteria_names = identify_feature_files(root_dir, criteria=True)
     # Load feature criteria values from root_dir
-    criteria_values = {name: np.load(criteria_path(root_dir, name)) for name in criteria_names}
+    criteria_values = {
+        name: np.load(criteria_path(root_dir, name)) for name in criteria_names
+    }
 
     # Copy feature criteria to target_dirs
     successful_copies = {}
@@ -151,7 +155,9 @@ def update_feature_paths(root_dirs: List[Union[Path, str]], remove_old: bool = T
         """
         save_dir = get_save_directory(root_dir)
         criteria_names = _identify_saved_criteria(root_dir)
-        feature_names = [cname for cname in criteria_names if (save_dir / f"{cname}.npy").exists()]
+        feature_names = [
+            cname for cname in criteria_names if (save_dir / f"{cname}.npy").exists()
+        ]
         return feature_names
 
     def _old_criteria_path(save_dir, name):
@@ -196,7 +202,9 @@ def update_manual_selection_shape(root_dirs: List[Union[Path, str]]):
             filepath = manual_selection_path(root_dir)
             manual_selection = np.load(filepath)
             if manual_selection.ndim != 2:
-                print(f"Manual selection data in {root_dir} has shape {manual_selection.shape}, expected (2, num_rois) or (num_rois, 2). Skipping.")
+                print(
+                    f"Manual selection data in {root_dir} has shape {manual_selection.shape}, expected (2, num_rois) or (num_rois, 2). Skipping."
+                )
                 continue
             if manual_selection.shape[0] != 2 and manual_selection.shape[1] == 2:
                 # Wrong shape, need to transpose
@@ -206,7 +214,9 @@ def update_manual_selection_shape(root_dirs: List[Union[Path, str]]):
                 # Correct shape, do nothing
                 pass
             else:
-                print(f"Manual selection data in {root_dir} has shape {manual_selection.shape}, expected (2, num_rois) or (num_rois, 2). Skipping.")
+                print(
+                    f"Manual selection data in {root_dir} has shape {manual_selection.shape}, expected (2, num_rois) or (num_rois, 2). Skipping."
+                )
 
 
 # @deprecated("Provided to address an update with the standard name for the selected cells.")

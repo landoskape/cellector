@@ -194,7 +194,11 @@ def manual_selection_path(root_dir: Union[Path, str]) -> Path:
     return save_dir / "manual_selection.npy"
 
 
-def save_manual_selection(root_dir: Union[Path, str], manual_labels: np.ndarray, manual_labels_active: np.ndarray) -> None:
+def save_manual_selection(
+    root_dir: Union[Path, str],
+    manual_labels: np.ndarray,
+    manual_labels_active: np.ndarray,
+) -> None:
     """Save manual selection labels to disk.
 
     Parameters

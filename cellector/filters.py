@@ -48,7 +48,12 @@ def window(image: np.ndarray, kernel: Optional[Union[str, callable]] = "hanning"
     return kernel_2d * image
 
 
-def butterworth_bpf(image: np.ndarray, lowcut: Union[float, None], highcut: Union[float, None], order: float = 1.0):
+def butterworth_bpf(
+    image: np.ndarray,
+    lowcut: Union[float, None],
+    highcut: Union[float, None],
+    order: float = 1.0,
+):
     """Filter an image using a Butterworth bandpass filter.
 
     This function filters the image in frequency space using by applying a Butterworth
@@ -85,7 +90,9 @@ def butterworth_bpf(image: np.ndarray, lowcut: Union[float, None], highcut: Unio
     lowpass = highcut is not None
     if highpass and lowpass:
         if lowcut > highcut:
-            raise ValueError("highcut frequency should be greater than lowcut frequency")
+            raise ValueError(
+                "highcut frequency should be greater than lowcut frequency"
+            )
     if highpass and lowcut < 0:
         raise ValueError("frequencies must be positive")
     if lowpass and highcut < 0:
@@ -101,7 +108,9 @@ def butterworth_bpf(image: np.ndarray, lowcut: Union[float, None], highcut: Unio
 
     yfreq = np.fft.fftshift(np.fft.fftfreq(ndfty, 1 / ny))
     xfreq = np.fft.fftshift(np.fft.fftfreq(ndftx, 1 / nx))
-    freq = np.sqrt(yfreq.reshape(-1, 1) ** 2 + xfreq.reshape(1, -1) ** 2)  # 2-D dft frequencies corresponds to fftshifted fft2 output
+    freq = np.sqrt(
+        yfreq.reshape(-1, 1) ** 2 + xfreq.reshape(1, -1) ** 2
+    )  # 2-D dft frequencies corresponds to fftshifted fft2 output
 
     # Create gain map over frequencies
     frequency_gain = np.ones_like(freq)
@@ -112,7 +121,9 @@ def butterworth_bpf(image: np.ndarray, lowcut: Union[float, None], highcut: Unio
 
     # Apply the filter in the frequency domain
     fft_image = np.fft.fftshift(np.fft.fft2(image, (ndfty, ndftx)), axes=(-2, -1))
-    return np.fft.ifft2(np.fft.ifftshift(frequency_gain * fft_image, axes=(-2, -1)), axes=(-2, -1))[..., :ny, :nx].real
+    return np.fft.ifft2(
+        np.fft.ifftshift(frequency_gain * fft_image, axes=(-2, -1)), axes=(-2, -1)
+    )[..., :ny, :nx].real
 
 
 # Definition of the required and optional parameters for each filter method
@@ -149,7 +160,10 @@ def _check_parameters(name, parameters):
             return False, f"Invalid parameter '{key}' for filter method '{name}'"
     for key in required:
         if key not in parameters:
-            return False, f"Required parameter '{key}' missing for filter method '{name}'"
+            return (
+                False,
+                f"Required parameter '{key}' missing for filter method '{name}'",
+            )
     return True, None
 
 

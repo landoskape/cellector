@@ -1,4 +1,8 @@
 # cellector
+[![PyPI version](https://badge.fury.io/py/syd.svg)](https://badge.fury.io/py/syd)
+<!-- [![Tests](https://github.com/landoskape/syd/actions/workflows/tests.yml/badge.svg)](https://github.com/landoskape/syd/actions/workflows/tests.yml) -->
+[![Documentation Status](https://readthedocs.org/projects/shareyourdata/badge/?version=stable)](https://shareyourdata.readthedocs.io/en/stable/?badge=stable)
+<!-- [![codecov](https://codecov.io/gh/landoskape/syd/branch/main/graph/badge.svg)](https://codecov.io/gh/landoskape/syd) -->
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 A pipeline and GUI for determining which ROIs match features in a fluorescence image. It
@@ -38,14 +42,14 @@ The basic workflow of this package is as follows:
 3. Save the data.
 4. Repeat (or use scripting to speed up).
 
-If you want to see the basic workflow in a notebook, look [here](./notebooks/tutorial.ipynb).
-Otherwise, read the instructions below or look at the [documentation](./docs/examples.md)
+If you want to see the basic workflow in a notebook, look [here](https://github.com/landoskape/cellector/blob/main/notebooks/tutorial.ipynb).
+Otherwise, read the instructions below or look at the [documentation](https://github.com/landoskape/cellector/blob/main/docs/examples.md)
 which is very far from complete at the moment. 
 
-#### Basic instructions
+### Basic instructions
 We've provided a few functions to make ``RoiProcessor`` objects that work differently
 depending on what kind of data you are starting with. For an exhaustive list, go
-[here](./docs/examples.md). If you are working directly on the output of suite2p, use:
+[here](https://github.com/landoskape/cellector/blob/main/docs/examples.md). If you are working directly on the output of suite2p, use:
 ```python
 from cellector.io import create_from_suite2p
 suite2p_dir = # define your suite2p path - the one with plane0, plane1, ... in it
@@ -58,9 +62,9 @@ from cellector.gui import SelectionGUI
 gui = SelectionGUI(roi_processor)
 ```
 
-Then, use the GUI and hit save! Instructions for the GUI are [here](./docs/gui.md).
+Then, use the GUI and hit save! Instructions for the GUI are [here](https://github.com/landoskape/cellector/blob/main/docs/gui.md).
 
-#### Scripting
+### Scripting
 The GUI works, but it can be a bit tedious to open it over and over again when you know
 you want the same settings for a group of sessions. To enable quick application of 
 feature criteria settings to many sessions, we have included scripting tools. 
@@ -85,7 +89,7 @@ for directory in other_directories:
     manager.save_all() 
 ```
 
-#### Handling convention changes in new versions
+### Handling convention changes in new versions
 Several changes will prevent or complicate backwards compatibility. Here's what you need
 to know:
 - `targetcell.npy` → `idx_selection.npy`: the name convention of the main output has been changed from targetcell.npy to idx_selection.npy
@@ -111,11 +115,11 @@ update_manual_selection_shape(root_dirs)
 update_feature_paths(root_dirs)
 ```
 
-Note that a few other things have changed in version 1.0.0, see the [CHANGELOG](CHANGELOG.md)
+Note that a few other things have changed in version 1.0.0, see the [CHANGELOG](https://github.com/landoskape/cellector/blob/main/CHANGELOG.md)
 for more detailed descriptions!
 
 ## Features in Progress
-#### Hyperparameter Choices
+### Hyperparameter Choices
 There are a few "hyperparameters" to the package, including filtering parameters, the eps
 value for phase correlation, and size parameters for centered stacks. We need to enable 
 hyperparameter optimization for these, which a user can supervise themselves. Idea:
@@ -131,7 +135,7 @@ In addition, there could be some automated tuning, for example, to pick the eps 
 could just input the maximum size ROI, and then measuring the average power for higher
 spatial frequencies.
 
-#### Visualization of algorithm and filtering steps etc
+### Visualization of algorithm and filtering steps etc
 To help choose hyperparameters and see how it's working, I'm going to build some tools to
 visualize masks and the reference image under different conditions. 
 

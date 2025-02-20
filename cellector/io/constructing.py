@@ -36,16 +36,22 @@ def _get_s2p_folders(suite2p_dir: Union[Path, str]) -> Tuple[List[Path], bool]:
         if not all(folder.is_dir() for folder in plane_folders):
             raise ValueError(f"Plane paths are not all directories in {suite2p_dir}!")
         if not all((folder / "stat.npy").exists() for folder in plane_folders):
-            raise FileNotFoundError(f"Could not find stat.npy files in each folder {suite2p_dir}!")
+            raise FileNotFoundError(
+                f"Could not find stat.npy files in each folder {suite2p_dir}!"
+            )
         if not all((folder / "ops.npy").exists() for folder in plane_folders):
-            raise FileNotFoundError(f"Could not find any ops.npy files in {suite2p_dir}!")
+            raise FileNotFoundError(
+                f"Could not find any ops.npy files in {suite2p_dir}!"
+            )
 
     # If stat.npy and ops.py are in the s2p_dir itself, assume it's a single plane without a plane folder
     elif (suite2p_dir / "stat.npy").exists() and (suite2p_dir / "ops.npy").exists():
         plane_folders = [suite2p_dir]
 
     else:
-        raise FileNotFoundError(f"Could not find any plane directories or stat.npy / ops.npy files in {suite2p_dir}!")
+        raise FileNotFoundError(
+            f"Could not find any plane directories or stat.npy / ops.npy files in {suite2p_dir}!"
+        )
 
     return plane_folders
 
@@ -77,7 +83,9 @@ def _get_s2p_data(s2p_folders: List[Path], reference_key: str = "meanImg_chan2")
         stats.append(np.load(folder / "stat.npy", allow_pickle=True))
         ops = np.load(folder / "ops.npy", allow_pickle=True).item()
         if reference_key not in ops:
-            raise ValueError(f"Reference key ({reference_key}) not found in ops.npy file ({folder / 'ops.npy'})!")
+            raise ValueError(
+                f"Reference key ({reference_key}) not found in ops.npy file ({folder / 'ops.npy'})!"
+            )
         references.append(ops[reference_key])
     if not all(ref.shape == references[0].shape for ref in references):
         raise ValueError("Reference images must have the same shape as each other!")
@@ -183,7 +191,9 @@ def create_from_suite2p(
 # ---------------------------------------------------------------------------------------
 # Methods for creating RoiProcessor objects from mask volumes or pixel data directly
 # ---------------------------------------------------------------------------------------
-def _get_pixel_data_single(mask: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _get_pixel_data_single(
+    mask: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Get pixel data from a single mask.
 
     Extracts the intensity values, y-coordinates, and x-coordinates from a single mask
@@ -226,7 +236,11 @@ def _get_pixel_data(mask_volume, verbose: bool = True):
     n_workers = max(2, cpu_count() - 2)
     try:
         with Pool(n_workers) as pool:
-            iterable = tqdm(mask_volume, desc="Extracting mask data", leave=False) if verbose else mask_volume
+            iterable = (
+                tqdm(mask_volume, desc="Extracting mask data", leave=False)
+                if verbose
+                else mask_volume
+            )
             results = list(pool.imap(_get_pixel_data_single, iterable))
 
     except Exception as e:
