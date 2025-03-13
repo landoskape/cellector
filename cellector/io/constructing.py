@@ -56,7 +56,9 @@ def _get_s2p_folders(suite2p_dir: Union[Path, str]) -> Tuple[List[Path], bool]:
     return plane_folders
 
 
-def _get_s2p_data(s2p_folders: List[Path], reference_key: str = "meanImg_chan2"):
+def _get_s2p_data(
+    s2p_folders: List[Path], reference_key: str = "meanImg_chan2"
+) -> Tuple[list[list[dict]], list[np.ndarray]]:
     """Get list of stats and chan2 reference images from all planes in a suite2p directory.
 
     suite2p saves the statistics and reference images for each plane in separate
@@ -94,7 +96,7 @@ def _get_s2p_data(s2p_folders: List[Path], reference_key: str = "meanImg_chan2")
     return stats, references
 
 
-def _get_s2p_redcell(s2p_folders: List[Path]):
+def _get_s2p_redcell(s2p_folders: List[Path]) -> list[np.ndarray]:
     """Get red cell probability masks from all planes in a suite2p directory.
 
     Extracts the red cell probability masks from each plane in a suite2p directory
@@ -131,7 +133,7 @@ def create_from_suite2p(
     autocompute: bool = True,
     clear_existing: bool = False,
     save_features: bool = True,
-):
+) -> RoiProcessor:
     """Create a RoiProcessor object from a suite2p directory.
 
     Parameters
@@ -214,7 +216,7 @@ def _get_pixel_data_single(
     return lam, ypix, xpix
 
 
-def _get_pixel_data(mask_volume, verbose: bool = True):
+def _get_pixel_data(mask_volume: np.ndarray, verbose: bool = True) -> list[dict]:
     """Get pixel data from a mask volume.
 
     Extracts the intensity values, y-coordinates, and x-coordinates from a mask volume
@@ -263,7 +265,7 @@ def create_from_mask_volume(
     autocompute: bool = True,
     clear_existing: bool = False,
     save_features: bool = True,
-):
+) -> RoiProcessor:
     """Create a RoiProcessor object
 
     Parameters
@@ -316,7 +318,7 @@ def create_from_pixel_data(
     autocompute: bool = True,
     clear_existing: bool = False,
     save_features: bool = True,
-):
+) -> RoiProcessor:
     """Create a RoiProcessor object
 
     Parameters

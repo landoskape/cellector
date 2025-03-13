@@ -3,7 +3,19 @@ All notable changes to this project will be documented in this file.
  
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
- 
+
+
+## [1.0.2] - 2025-03-13
+
+### Added
+- More type hints to the constructor module for better IDE support
+
+### Changed
+- Fixed import statements in gui.py to put PyQt5 before napari and pyqtgraph. This fixes
+an issue where pyqtgraph would automatically import PySide6 if installed and prevent the
+PyQt5 import from working. It should help make celletor more compatible with other environments.
+- Improved README and fixed links.
+
 ## [1.0.1] - 2025-02-20
 
 ### Added

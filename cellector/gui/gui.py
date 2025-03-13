@@ -1,10 +1,9 @@
-from typing import Any
 from copy import copy
 import functools
 import numpy as np
-import pyqtgraph as pg
 from PyQt5 import QtCore, QtWidgets
 import napari
+import pyqtgraph as pg
 from napari.utils.colormaps import label_colormap, direct_colormap
 import matplotlib as mpl
 import matplotlib.pyplot as plt
