@@ -8,7 +8,10 @@ from .roi_processor import RoiProcessor
 
 class CellectorManager:
     def __init__(
-        self, root_dir: Union[Path, str], exclude_features: Optional[List[str]] = None
+        self,
+        root_dir: Union[Path, str],
+        exclude_features: Optional[List[str]] = None,
+        num_rois: Optional[int] = None,
     ):
         """Initialize CellectorManager.
 
@@ -18,12 +21,14 @@ class CellectorManager:
             Path to root directory for saving/loading data
         exclude_features : Optional[List[str]]
             List of feature names to exclude from selection criteria
-        load_from_disk : bool
-            If True, load data from disk. If False, initialize empty state
-            (used by factory methods)
+        num_rois : Optional[int]
+            Number of ROIs to expect in the data. If not provided, the number of ROIs
+            will be determined by the first feature file found in the root directory.
         """
         self.root_dir = Path(root_dir)
         self.exclude_features = exclude_features or []
+        if num_rois is not None:
+            self.num_rois = num_rois
 
         # Identify feature files and criteria files
         feature_names = io.identify_feature_files(self.root_dir, criteria=False)
@@ -46,7 +51,9 @@ class CellectorManager:
 
     @classmethod
     def make_from_roi_processor(
-        cls, roi_processor: RoiProcessor, exclude_features: Optional[List[str]] = None
+        cls,
+        roi_processor: RoiProcessor,
+        exclude_features: Optional[List[str]] = None,
     ) -> "CellectorManager":
         """Create a CellectorManager from an existing RoiProcessor.
 
@@ -68,7 +75,7 @@ class CellectorManager:
         CellectorManager
             Manager object with features and criteria from the RoiProcessor object.
         """
-        manager = cls(roi_processor.root_dir, exclude_features)
+        manager = cls(roi_processor.root_dir, exclude_features, roi_processor.num_rois)
         for feature_name, feature_values in roi_processor.features.items():
             if feature_name not in manager.features:
                 manager.add_feature(feature_name, feature_values)

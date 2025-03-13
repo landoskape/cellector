@@ -12,7 +12,7 @@ You've arrived at the documentation for the cellector package. Check out the tab
    examples
    gui
    api/index
-
+   changelog
 
 .. include:: ../../README.md
    :parser: myst_parser.sphinx_

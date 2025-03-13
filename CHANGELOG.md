@@ -5,6 +5,21 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 
+## [1.0.3] - 2025-03-13
+
+### Added
+- The changelog is now included in the documentation!
+
+### Changed
+- Previously, the ``CellectorManager`` class would infer the number of ROIs from
+features saved to disk in the cellector directory. This meant that if you used
+``CellectorManager.from_roi_processor`` and the ``RoiProcessor`` was using
+``save_features=False``, then the ``CellectorManager`` would not know how many ROIs to
+expect when building the manual label arrays. Now, the ``CellectorManager`` accepts an
+additional optional argument ``num_rois`` which is automatically passed from the 
+``RoiProcessor`` instance when using the ``make_from_roi_processor`` class method.
+
+
 ## [1.0.2] - 2025-03-13
 
 ### Added
@@ -73,8 +88,8 @@ update_manual_selection_shape(root_dirs)
 update_feature_paths(root_dirs)
 ```
 
-The [``tutorial.ipynb``](./notebooks/tutorial.ipynb) notebook includes explanations for
-how to do new things with the package including the deprecation handling.
+The [``tutorial.ipynb``](https://github.com/landoskape/cellector/blob/main/notebooks/tutorial.ipynb)
+notebook includes explanations for how to do new things with the package including the deprecation handling.
 
 ### Added
 A manager module with the ``CellectorManager`` class which can be used to manage the 
