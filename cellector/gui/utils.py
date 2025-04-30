@@ -13,6 +13,7 @@ class SelectionState:
     show_control_cells: bool = False
     show_mask_image: bool = False
     mask_visibility: bool = True
+    show_functional_reference: bool = False
 
     # Selection state
     use_manual_labels: bool = True
@@ -37,6 +38,11 @@ class SelectionState:
         """Toggles overall mask visibility."""
         self.mask_visibility = not self.mask_visibility
         return self.mask_visibility
+
+    def toggle_reference_type(self) -> bool:
+        """Toggles between structural and functional reference visibility."""
+        self.show_functional_reference = not self.show_functional_reference
+        return self.show_functional_reference
 
 
 class SelectionConfig:
