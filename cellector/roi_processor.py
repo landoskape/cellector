@@ -4,7 +4,7 @@ from copy import deepcopy
 import numpy as np
 from . import utils
 from .filters import filter
-from .features import FeaturePipeline, standard_pipelines
+from .features import FeaturePipeline, standard_pipelines, functional_pipelines
 
 # Might be useful for optimizing parameters
 # from sklearn.model_selection import ParameterGrid
@@ -30,11 +30,15 @@ PARAM_CACHE_MAPPING = dict(
         "centered_masks",
         "centered_references",
         "filtered_centered_references",
+        "centered_references_functional",
+        "filtered_centered_references_functional",
     ],
     centered_width=[
         "centered_masks",
         "centered_references",
         "filtered_centered_references",
+        "centered_references_functional",
+        "filtered_centered_references_functional",
     ],
     centroid_method=[
         "yc",
@@ -42,12 +46,14 @@ PARAM_CACHE_MAPPING = dict(
         "centered_masks",
         "centered_references",
         "filtered_centered_references",
+        "centered_references_functional",
+        "filtered_centered_references_functional",
     ],
     window_kernel=[],
     phase_corr_eps=[],
-    lowcut=["filtered_centered_references"],
-    highcut=["filtered_centered_references"],
-    order=["filtered_centered_references"],
+    lowcut=["filtered_centered_references", "filtered_centered_references_functional"],
+    highcut=["filtered_centered_references", "filtered_centered_references_functional"],
+    order=["filtered_centered_references", "filtered_centered_references_functional"],
 )
 
 
@@ -73,6 +79,8 @@ class RoiProcessor:
         1D numpy array containing the plane index to each ROI.
     references : np.ndarray
         3D numpy array containing reference images for each plane.
+    functional_references : np.ndarray | None
+        3D numpy array containing functional reference images for each plane (optional).
     num_planes : int
         Number of image planes.
     lx, ly : int
@@ -89,6 +97,8 @@ class RoiProcessor:
         Mapping of feature pipeline names to dependencies on attributes of roi_processor instances.
     parameters : dict
         Dictionary containing all the preprocessing parameters used.
+    _cache : dict
+        Dictionary containing cached values of attributes that are expensive to compute.
     """
 
     def __init__(
@@ -97,6 +107,7 @@ class RoiProcessor:
         stats: Union[List[Dict], np.ndarray[Dict]],
         references: np.ndarray,
         plane_idx: np.ndarray,
+        functional_references: Union[np.ndarray, None] = None,
         extra_features: Optional[Dict[str, List[np.ndarray]]] = None,
         autocompute: bool = True,
         use_saved: bool = True,
@@ -107,6 +118,9 @@ class RoiProcessor:
 
         Parameters
         ----------
+        root_dir : Union[Path, str]
+            Path to the root directory where the data is stored. This is used to save and load
+            features from disk.
         stats: List[Dict] or np.ndarray[Dict]
             List or numpy array of dictionaries containing ROI statistics for each mask.
             required keys: 'lam', 'xpix', 'ypix', which are lists of numbers corresponding to
@@ -118,9 +132,8 @@ class RoiProcessor:
         plane_idx : np.ndarray
             1D numpy array containing the plane index to each ROI. The length of this array
             should be equal to the number of ROIs in stats.
-        root_dir : Union[Path, str]
-            Path to the root directory where the data is stored. This is used to save and load
-            features from disk.
+        functional_references : np.ndarray | None, optional
+            3D numpy array containing functional reference images for each plane (optional).
         extra_features : Dict[str, np.ndarray], optional
             Dictionary containing extra features to be added to each plane. Each key is the
             name of the feature and the value is a list of 1d numpy arrays with length equal
@@ -148,12 +161,26 @@ class RoiProcessor:
                 )
         if not isinstance(references, np.ndarray) or references.ndim != 3:
             raise TypeError("References must be a 3D numpy array")
+        if (
+            functional_references is not None
+            and functional_references.shape != references.shape
+        ):
+            raise TypeError(
+                "Functional references must have the same shape as references"
+            )
         if not isinstance(plane_idx, np.ndarray) or plane_idx.ndim != 1:
             raise TypeError("Plane index must be a 1D numpy array")
         if len(stats) != len(plane_idx):
             raise ValueError("Number of mask arrays must match plane index array")
         if np.max(plane_idx) >= references.shape[0]:
             raise ValueError("Plane index values exceed number of reference images")
+        if (
+            functional_references is not None
+            and np.max(plane_idx) >= functional_references.shape[0]
+        ):
+            raise ValueError(
+                "Plane index values exceed number of functional reference images"
+            )
 
         # Make sure that the plane index is sorted
         if not np.all(np.diff(plane_idx) >= 0):
@@ -170,6 +197,7 @@ class RoiProcessor:
         self.rois_per_plane = np.bincount(plane_idx)
         self.references = references
         self.plane_idx = plane_idx
+        self.functional_references = functional_references
         self.root_dir = root_dir
         self.save_features = save_features
 
@@ -235,6 +263,10 @@ class RoiProcessor:
         # register feature pipelines
         for pipeline in standard_pipelines:
             self.register_feature_pipeline(pipeline)
+
+        if self.functional_references is not None:
+            for pipeline in functional_pipelines:
+                self.register_feature_pipeline(pipeline)
 
         # Measure features
         if autocompute:
@@ -525,6 +557,97 @@ class RoiProcessor:
             )
             self._cache["filtered_centered_references"] = filtered_centered_references
         return self._cache["filtered_centered_references"]
+
+    @property
+    def centered_references_functional(self):
+        """Return the centered references image for each ROI based on the functional reference image.
+
+        Returns
+        -------
+        np.ndarray
+            The centered references image around each ROI, with shape (numROIs, centered_width*2+1, centered_width*2+1)
+
+        Raises
+        ------
+        ValueError
+            If functional references are not available.
+        """
+        if self.functional_references is None:
+            raise ValueError("Functional references are not available")
+        if "centered_references_functional" not in self._cache:
+            centered_references = utils.get_centered_references(
+                self.functional_references,
+                self.plane_idx,
+                self.centroids,
+                width=self.parameters["centered_width"],
+                fill_value=self.parameters["fill_value"],
+            )
+            self._cache["centered_references_functional"] = centered_references
+        return self._cache["centered_references_functional"]
+
+    @property
+    def filtered_references_functional(self):
+        """Return the filtered reference image for each ROI based on the functional reference image.
+
+        Uses a Butterworth bandpass filter to filter the reference image.
+
+        Returns
+        -------
+        np.ndarray
+            The filtered reference image for each ROI, with shape (numROIs, lx, ly)
+
+        Raises
+        ------
+        ValueError
+            If functional references are not available.
+        """
+        if self.functional_references is None:
+            raise ValueError("Functional references are not available")
+        if "filtered_references_functional" not in self._cache:
+            bpf_parameters = dict(
+                lowcut=self.parameters["lowcut"],
+                highcut=self.parameters["highcut"],
+                order=self.parameters["order"],
+            )
+            filtered_references = filter(
+                np.stack(self.functional_references),
+                "butterworth_bpf",
+                **bpf_parameters,
+            )
+            self._cache["filtered_references_functional"] = filtered_references
+        return self._cache["filtered_references_functional"]
+
+    @property
+    def filtered_centered_references_functional(self):
+        """Return the filtered centered references image for each ROI based on the functional reference image.
+
+        Uses a Butterworth bandpass filter to filter the reference image, then generates
+        a centered reference stack around each ROI using the filtered reference.
+
+        Returns
+        -------
+        np.ndarray
+            The filtered centered references image around each ROI, with shape (numROIs, centered_width*2+1, centered_width*2+1)
+
+        Raises
+        ------
+        ValueError
+            If functional references are not available.
+        """
+        if self.functional_references is None:
+            raise ValueError("Functional references are not available")
+        if "filtered_centered_references_functional" not in self._cache:
+            filtered_centered_references = utils.get_centered_references(
+                self.filtered_references_functional,
+                self.plane_idx,
+                self.centroids,
+                width=self.parameters["centered_width"],
+                fill_value=self.parameters["fill_value"],
+            )
+            self._cache["filtered_centered_references_functional"] = (
+                filtered_centered_references
+            )
+        return self._cache["filtered_centered_references_functional"]
 
     @property
     def mask_volume(self):
