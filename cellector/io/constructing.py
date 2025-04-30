@@ -57,13 +57,16 @@ def _get_s2p_folders(suite2p_dir: Union[Path, str]) -> Tuple[List[Path], bool]:
 
 
 def _get_s2p_data(
-    s2p_folders: List[Path], reference_key: str = "meanImg_chan2"
-) -> Tuple[list[list[dict]], list[np.ndarray]]:
+    s2p_folders: List[Path],
+    reference_key: str = "meanImg_chan2",
+    functional_key: str = "meanImg",
+) -> Tuple[list[list[dict]], list[np.ndarray], list[np.ndarray]]:
     """Get list of stats and chan2 reference images from all planes in a suite2p directory.
 
     suite2p saves the statistics and reference images for each plane in separate
     directories. This function reads the statistics and reference images for each plane
-    and returns them as lists.
+    and returns them as lists. The reference image is usually the average structural
+    fluorescence and the functional reference is usually the average green fluorescence.
 
     Parameters
     ----------
@@ -71,6 +74,8 @@ def _get_s2p_data(
         List of directories that contain the suite2p output for each plane (stat.npy and ops.npy).
     reference_key : str, optional
         Key to use for the reference image. Default is "meanImg_chan2".
+    functional_key : str, optional
+        Key to use for the functional image. Default is "meanImg".
 
     Returns
     -------
@@ -78,9 +83,12 @@ def _get_s2p_data(
         Each element of stats is a list of dictionaries containing ROI statistics for each plane.
     references : list of np.ndarrays
         Each element of references is an image (usually of average red fluorescence) for each plane.
+    functional_references : list of np.ndarrays
+        Each element of functional_references is an image (usually of average green fluorescence) for each plane.
     """
     stats = []
     references = []
+    functional_references = []
     for folder in s2p_folders:
         stats.append(np.load(folder / "stat.npy", allow_pickle=True))
         ops = np.load(folder / "ops.npy", allow_pickle=True).item()
@@ -88,12 +96,17 @@ def _get_s2p_data(
             raise ValueError(
                 f"Reference key ({reference_key}) not found in ops.npy file ({folder / 'ops.npy'})!"
             )
+        if functional_key not in ops:
+            raise ValueError(
+                f"Functional key ({functional_key}) not found in ops.npy file ({folder / 'ops.npy'})!"
+            )
         references.append(ops[reference_key])
+        functional_references.append(ops[functional_key])
     if not all(ref.shape == references[0].shape for ref in references):
         raise ValueError("Reference images must have the same shape as each other!")
     if not all(ref.ndim == 2 for ref in references):
         raise ValueError("Reference images must be 2D arrays!")
-    return stats, references
+    return stats, references, functional_references
 
 
 def _get_s2p_redcell(s2p_folders: List[Path]) -> list[np.ndarray]:
@@ -129,6 +142,7 @@ def create_from_suite2p(
     suite2p_dir: Union[Path, str],
     use_redcell: bool = True,
     reference_key: str = "meanImg_chan2",
+    functional_key: str = "meanImg",
     extra_features: dict = {},
     autocompute: bool = True,
     clear_existing: bool = False,
@@ -144,6 +158,8 @@ def create_from_suite2p(
         Whether to load redcell data from suite2p folders. Default is True.
     reference_key : str, optional
         Key to use for reference images in the suite2p folders. Default is "meanImg_chan2".
+    functional_key : str, optional
+        Key to use for functional reference images in the suite2p folders. Default is "meanImg".
     extra_features : dict, optional
         Extra features to add to the RoiProcessor object. Default is empty.
     autocompute : bool, optional
@@ -165,7 +181,11 @@ def create_from_suite2p(
     suite2p_dir = Path(suite2p_dir)
     suite2p_folders = _get_s2p_folders(suite2p_dir)
     num_planes = len(suite2p_folders)
-    stats, references = _get_s2p_data(suite2p_folders, reference_key=reference_key)
+    stats, references, functional_references = _get_s2p_data(
+        suite2p_folders,
+        reference_key=reference_key,
+        functional_key=functional_key,
+    )
     rois_per_plane = [len(stat) for stat in stats]
 
     if use_redcell:
@@ -176,6 +196,7 @@ def create_from_suite2p(
     # Build appropriate format for RoiProcessor (ROI data concatenated across planes)
     stats = cat_planes(stats)
     references = np.stack(references)
+    functional_references = np.stack(functional_references)
     plane_idx = np.repeat(np.arange(num_planes), rois_per_plane)
 
     # Initialize roi_processor object with suite2p data
@@ -184,6 +205,7 @@ def create_from_suite2p(
         stats,
         references,
         plane_idx,
+        functional_references=functional_references,
         extra_features=extra_features,
         autocompute=autocompute,
         save_features=save_features,
@@ -261,6 +283,7 @@ def create_from_mask_volume(
     mask_volume: np.ndarray,
     references: np.ndarray,
     plane_idx: np.ndarray,
+    functional_references: np.ndarray = None,
     extra_features: dict = {},
     autocompute: bool = True,
     clear_existing: bool = False,
@@ -280,6 +303,9 @@ def create_from_mask_volume(
         image for a plane containing the fluorescence values to compare masks to.
     plane_idx : np.ndarray
         A 1D array of plane indices for each ROI in the mask volume.
+    functional_references : np.ndarray, optional
+        A 3D functional reference volume with shape (num_planes, height, width) where each slice is a functional
+        reference image for a plane containing the fluorescence values to compare masks to. Default is None.
     extra_features : dict, optional
         Extra features to add to the RoiProcessor object. Default is empty.
     autocompute : bool, optional
@@ -303,6 +329,7 @@ def create_from_mask_volume(
         stats,
         references,
         plane_idx,
+        functional_references=functional_references,
         extra_features=extra_features,
         autocompute=autocompute,
         save_features=save_features,
@@ -314,6 +341,7 @@ def create_from_pixel_data(
     stats: List[dict],
     references: np.ndarray,
     plane_idx: np.ndarray,
+    functional_references: np.ndarray = None,
     extra_features: dict = {},
     autocompute: bool = True,
     clear_existing: bool = False,
@@ -333,6 +361,9 @@ def create_from_pixel_data(
         image for a plane containing the fluorescence values to compare masks to.
     plane_idx : np.ndarray
         A 1D array of plane indices for each ROI in the mask volume.
+    functional_references : np.ndarray, optional
+        A 3D functional reference volume with shape (num_planes, height, width) where each slice is a functional
+        reference image for a plane containing the fluorescence values to compare masks to. Default is None.
     extra_features : dict, optional
         Extra features to add to the RoiProcessor object. Default is empty.
     autocompute : bool, optional
@@ -355,6 +386,7 @@ def create_from_pixel_data(
         stats,
         references,
         plane_idx,
+        functional_references=functional_references,
         extra_features=extra_features,
         autocompute=autocompute,
         save_features=save_features,
