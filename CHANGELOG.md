@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.1.0] - 2025-04-30
+
+### Added
+- Added a functional dot product feature so you can choose cells that don't have bleedthrough. 
+- Added a system to the ``SelectionGUI`` to hide and show features. This is useful if you 
+  want to hide features that you don't regularly use so that the GUI is not cluttered.
+- Added text describing the key commands to the ``SelectionGUI``.
+
+### Changed
+- SelectionGUI stacks features vertically so they are united by column. 
 
 ## [1.0.3] - 2025-03-13
 
