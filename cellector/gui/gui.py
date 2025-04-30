@@ -58,6 +58,9 @@ class SelectionGUI:
         # Add image layers
         self._init_image_layers()
 
+        # Add text overlay
+        self._show_key_bindings_overlay()
+
         # Build feature window components
         self._init_feature_window()
 
@@ -72,7 +75,15 @@ class SelectionGUI:
             blending="additive",
             opacity=0.6,
         )
-
+        if self.roi_processor.functional_references is not None:
+            self.functional_reference = self.viewer.add_image(
+                np.stack(self.roi_processor.functional_references),
+                name="functional_reference",
+                blending="additive",
+                colormap="green",
+                opacity=0.6,
+                visible=self.state.show_functional_reference,
+            )
         self.masks = self.viewer.add_image(
             self.mask_image,
             name="masks_image",
@@ -95,24 +106,44 @@ class SelectionGUI:
             self.viewer.dims.current_step[2],
         )
 
+    def _show_key_bindings_overlay(self):
+        """Display keyboard shortcut help in the viewer overlay."""
+        help_text = "\n".join(
+            [
+                "Keyboard Shortcuts:",
+                "t - Toggle selected / rejected cells",
+                "s - Switch b/w mask images / labels",
+                "v - Toggle mask visibility",
+                "r - Toggle reference visibility",
+                "c - Cycle color state",
+                "a - Cycle colormap",
+                "g - Toggle structural / functional reference",
+            ]
+        )
+
+        self.viewer.text_overlay.text = help_text
+        self.viewer.text_overlay.visible = True
+        # self.viewer.text_overlay.anchor = "lower_left"
+        self.viewer.text_overlay.font_size = 12
+        self.viewer.text_overlay.color = "white"
+
     def _init_feature_window(self) -> None:
         """Initialize the feature window and its components."""
         # Create main layout container
         self.feature_window = pg.GraphicsLayoutWidget()
+        self._hidden_features = []
 
         # Create main layout sections
         self.text_area = pg.LabelItem(
             "Welcome to the cell selector GUI", justify="left"
         )
-        self.toggle_area = pg.GraphicsLayout()
-        self.plot_area = pg.GraphicsLayout()
+        self.feature_layout = pg.GraphicsLayout()
         self.button_area = pg.GraphicsLayout()
 
         # Add sections to main window
         self.feature_window.addItem(self.text_area, row=0, col=0)
-        self.feature_window.addItem(self.toggle_area, row=1, col=0)
-        self.feature_window.addItem(self.plot_area, row=2, col=0)
-        self.feature_window.addItem(self.button_area, row=3, col=0)
+        self.feature_window.addItem(self.feature_layout, row=1, col=0)
+        self.feature_window.addItem(self.button_area, row=2, col=0)
 
         # Build UI components
         self._compute_histograms()
@@ -131,6 +162,7 @@ class SelectionGUI:
         buttons = {
             "save": ("Save Selection", self.save_selection),
             "toggle_cells": ("Target Cells", self._toggle_cells_to_view),
+            "toggle_reference": ("Reference Image", self._toggle_reference_type),
             "use_manual_labels": (
                 "Using Manual Labels",
                 self._toggle_use_manual_labels,
@@ -145,7 +177,11 @@ class SelectionGUI:
                 SelectionConfig.COLORMAPS[self.state.idx_colormap],
                 self._next_colormap,
             ),
+            "enable_all": ("Enable All Features", self._enable_all_features),
         }
+
+        if self.roi_processor.functional_references is not None:
+            buttons.pop("toggle_reference")
 
         self.buttons = {}
         self.button_proxies = {}
@@ -275,6 +311,7 @@ class SelectionGUI:
             "r": self._update_reference_visibility,
             "c": self._next_color_state,
             "a": self._next_colormap,
+            "g": self._toggle_reference_type,
         }
 
         for key, callback in key_bindings.items():
@@ -349,8 +386,8 @@ class SelectionGUI:
         self.preserve_methods = {}
 
         for idx, feature in enumerate(self.manager.features):
-            # Create plot
-            plot = self.plot_area.addPlot(row=0, col=idx, title=feature)
+            # Create plot and add it to the feature_layout below the toggles
+            plot = self.feature_layout.addPlot(row=2, col=idx, title=feature)
             plot.setMouseEnabled(x=False)
             plot.setYRange(0, self.h_values_maximum[feature])
 
@@ -408,23 +445,42 @@ class SelectionGUI:
     def _build_feature_toggles(self) -> None:
         """Build toggle buttons for feature selection."""
         self.min_max_name = ["min", "max"]
-        self.max_length_name = (
-            max(len(feature) for feature in self.manager.features) + 9
-        )
 
+        # Feature visibility
         self.use_feature_buttons = {}
-        self.use_feature_proxies = []
+        self.use_feature_proxies = {}
+
+        # Feature cutoff selection
+        self.use_feature_cutoff_buttons = {}
+        self.use_feature_cutoff_proxies = {}
+        self.use_feature_cutoff_layout = {}
 
         for idx, feature in enumerate(self.manager.features):
-            feature_toggles = []
+            # Feature selection
+            button, proxy = gui_factory.create_button(
+                text=f"Disable {feature}",
+                callback=functools.partial(self._hide_feature, feature=feature),
+                style=SelectionConfig.STYLES["BUTTON"],
+            )
+            self.use_feature_buttons[feature] = button
+            self.use_feature_proxies[feature] = proxy
+            self.feature_layout.addItem(proxy, row=0, col=idx)
+
+            feature_cutoff_toggles = []
+            feature_cutoff_proxies = []
+
+            # Create a vertical layout for this feature's toggles
+            self.use_feature_cutoff_layout[feature] = self.feature_layout.addLayout(
+                row=1, col=idx
+            )
+
             for i in range(2):
-                proxy_idx = 2 * idx + i
                 is_active = self.feature_active[feature][i]
 
                 button, proxy = gui_factory.create_button(
                     text=self._get_cutoff_toggle_text(feature, i, is_active),
                     callback=functools.partial(
-                        self._toggle_feature, feature=feature, iminmax=i
+                        self._toggle_feature_cutoff, feature=feature, iminmax=i
                     ),
                     style=SelectionConfig.STYLES[
                         "UNCHECKED" if is_active else "CHECKED"
@@ -433,18 +489,20 @@ class SelectionGUI:
                 )
                 button.setChecked(is_active)
 
-                feature_toggles.append(button)
-                self.use_feature_proxies.append(proxy)
-                self.toggle_area.addItem(proxy, row=0, col=proxy_idx)
+                feature_cutoff_toggles.append(button)
+                feature_cutoff_proxies.append(proxy)
 
-            self.use_feature_buttons[feature] = feature_toggles
+                # Add proxy to the toggle_buttons layout
+                self.use_feature_cutoff_layout[feature].addItem(proxy, row=0, col=i)
+
+            self.use_feature_cutoff_buttons[feature] = feature_cutoff_toggles
+            self.use_feature_cutoff_proxies[feature] = feature_cutoff_proxies
 
     def _get_cutoff_toggle_text(self, feature: str, idx: int, is_active: bool) -> str:
         """Generate text for feature cutoff toggle buttons."""
-        action = "using" if is_active else "ignore"
-        return f"{action} {self.min_max_name[idx]} {feature}".center(
-            self.max_length_name, " "
-        )
+        action = "use" if is_active else "ignore"
+        base_text = f"{action} {self.min_max_name[idx]}"
+        return f"{base_text}\n{feature}"
 
     def regenerate_mask_data(self) -> None:
         """Update mask visualization and histograms based on current selection."""
@@ -579,7 +637,63 @@ class SelectionGUI:
 
         self._update_criteria(feature)
 
-    def _toggle_feature(self, event: Event, feature: str, iminmax: int) -> None:
+    def _hide_feature(self, feature: str) -> None:
+        """Hide a feature from the selection."""
+        if feature in self._hidden_features:
+            return
+
+        self._hidden_features.append(feature)
+
+        # Prevent user from using a feature that is not visible
+        for i in range(2):
+            if self.feature_active[feature][i]:
+                self._toggle_feature_cutoff(None, feature, i)
+
+        self.use_feature_proxies[feature].hide()
+        self.feature_layout.removeItem(self.use_feature_proxies[feature])
+        self.use_feature_cutoff_layout[feature].hide()
+        self.feature_layout.removeItem(self.use_feature_cutoff_layout[feature])
+        # for proxy in self.use_feature_cutoff_proxies[feature]:
+        #     proxy.hide()
+        self.hist_plots[feature].hide()
+        self.feature_layout.removeItem(self.hist_plots[feature])
+
+    def _show_feature(self, feature: str) -> None:
+        if feature not in self._hidden_features:
+            return
+
+        self._hidden_features.remove(feature)
+
+        idx_to_feature = list(self.manager.features.keys()).index(feature)
+        self.use_feature_proxies[feature].show()
+        self.feature_layout.addItem(
+            self.use_feature_proxies[feature],
+            row=0,
+            col=idx_to_feature,
+        )
+        self.use_feature_cutoff_layout[feature].show()
+        self.feature_layout.addItem(
+            self.use_feature_cutoff_layout[feature],
+            row=1,
+            col=idx_to_feature,
+        )
+        self.hist_plots[feature].show()
+        self.feature_layout.addItem(self.hist_plots[feature], row=2, col=idx_to_feature)
+
+        # Force style refresh on the disable button to clear potential hover state
+        widget = self.use_feature_proxies[feature].widget()
+        if widget is not None:
+            widget.setAttribute(QtCore.Qt.WA_UnderMouse, False)
+            widget.update()
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+
+    def _enable_all_features(self, event: Event) -> None:
+        """Enable all features."""
+        for feature in self.manager.features:
+            self._show_feature(feature)
+
+    def _toggle_feature_cutoff(self, event: Event, feature: str, iminmax: int) -> None:
         """Handle feature toggle button clicks.
 
         Parameters
@@ -591,7 +705,7 @@ class SelectionGUI:
         iminmax : int
             Index indicating minimum (0) or maximum (1) toggle
         """
-        is_active = self.use_feature_buttons[feature][iminmax].isChecked()
+        is_active = self.use_feature_cutoff_buttons[feature][iminmax].isChecked()
         self.feature_active[feature][iminmax] = is_active
         self._update_feature_toggle(feature, iminmax)
         self._update_criteria(feature)
@@ -607,15 +721,17 @@ class SelectionGUI:
             Index indicating minimum (0) or maximum (1) toggle
         """
         is_active = self.feature_active[feature][iminmax]
-        button = self.use_feature_buttons[feature][iminmax]
+        button = self.use_feature_cutoff_buttons[feature][iminmax]
 
         if is_active:
+            button.setChecked(True)
             button.setText(self._get_cutoff_toggle_text(feature, iminmax, True))
             button.setStyleSheet(SelectionConfig.STYLES["UNCHECKED"])
             self.cutoff_lines[feature][iminmax].setValue(
                 self.feature_cutoffs[feature][iminmax]
             )
         else:
+            button.setChecked(False)
             button.setText(self._get_cutoff_toggle_text(feature, iminmax, False))
             button.setStyleSheet(SelectionConfig.STYLES["CHECKED"])
             self.cutoff_lines[feature][iminmax].setValue(
@@ -654,6 +770,15 @@ class SelectionGUI:
         self.regenerate_mask_data()
         self.update_text(
             f"Now viewing {'control' if self.state.show_control_cells else 'target'} cells"
+        )
+
+    def _toggle_reference_type(self, event: Event) -> None:
+        """Toggle the visibility of the functional reference image."""
+        self.state.toggle_reference_type()
+        self.reference.visible = not self.state.show_functional_reference
+        self.functional_reference.visible = self.state.show_functional_reference
+        self.update_text(
+            f"Now showing {'functional reference' if self.state.show_functional_reference else 'reference image'}"
         )
 
     def _single_click_label(self, layer: Layer, event: Event) -> None:
