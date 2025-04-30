@@ -1,4 +1,6 @@
 from typing import List
+from functools import partial
+import numpy as np
 from .utils import (
     phase_correlation_zero,
     dot_product,
@@ -7,6 +9,11 @@ from .utils import (
     surround_filter,
 )
 from .filters import filter
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .roi_processor import RoiProcessor
 
 
 class FeaturePipeline:
@@ -30,8 +37,19 @@ class FeaturePipeline:
         self.dependencies = dependencies
 
 
-def compute_phase_correlation(roi_processor):
+def compute_phase_correlation(
+    roi_processor: "RoiProcessor",
+    functional: bool = False,
+) -> np.ndarray:
     """Compute the phase correlation between the masks and reference images.
+
+    Parameters
+    ----------
+    roi_processor : RoiProcessor
+        The roi_processor instance to compute the phase correlation for.
+    functional : bool, optional
+        Whether to compute the phase correlation between the masks and functional reference images.
+        Default is False.
 
     Returns
     -------
@@ -44,7 +62,10 @@ def compute_phase_correlation(roi_processor):
     """
     # Input to phase correlation is centered masks and centered references
     centered_masks = roi_processor.centered_masks
-    centered_references = roi_processor.centered_references
+    if functional:
+        centered_references = roi_processor.centered_references_functional
+    else:
+        centered_references = roi_processor.centered_references
 
     # Window the centered masks and references
     windowed_masks = filter(
@@ -62,8 +83,19 @@ def compute_phase_correlation(roi_processor):
     )
 
 
-def compute_dot_product(roi_processor):
+def compute_dot_product(
+    roi_processor: "RoiProcessor",
+    functional: bool = False,
+) -> np.ndarray:
     """Compute the dot product between the masks and filtered reference images.
+
+    Parameters
+    ----------
+    roi_processor : RoiProcessor
+        The roi_processor instance to compute the dot product for.
+    functional : bool, optional
+        Whether to compute the dot product between the masks and functional reference images.
+        Default is False.
 
     Returns
     -------
@@ -80,12 +112,26 @@ def compute_dot_product(roi_processor):
     ypix = roi_processor.ypix
     xpix = roi_processor.xpix
     plane_idx = roi_processor.plane_idx
-    filtered_references = roi_processor.filtered_references
+    if functional:
+        filtered_references = roi_processor.filtered_references_functional
+    else:
+        filtered_references = roi_processor.filtered_references
     return dot_product(lam, ypix, xpix, plane_idx, filtered_references)
 
 
-def compute_corr_coef(roi_processor):
+def compute_corr_coef(
+    roi_processor: "RoiProcessor",
+    functional: bool = False,
+) -> np.ndarray:
     """Compute the correlation coefficient between the masks and reference images.
+
+    Parameters
+    ----------
+    roi_processor : RoiProcessor
+        The roi_processor instance to compute the correlation coefficient for.
+    functional : bool, optional
+        Whether to compute the correlation coefficient between the masks and functional reference images.
+        Default is False.
 
     Returns
     -------
@@ -97,7 +143,12 @@ def compute_corr_coef(roi_processor):
     utils.compute_correlation : Function that computes the correlation coefficient values.
     """
     centered_masks = roi_processor.centered_masks
-    filtered_centered_references = roi_processor.filtered_centered_references
+    if functional:
+        filtered_centered_references = (
+            roi_processor.filtered_centered_references_functional
+        )
+    else:
+        filtered_centered_references = roi_processor.filtered_centered_references
     iterations = roi_processor.parameters["surround_iterations"]
     masks_surround, references_surround = surround_filter(
         centered_masks, filtered_centered_references, iterations=iterations
@@ -105,11 +156,22 @@ def compute_corr_coef(roi_processor):
     return compute_correlation(masks_surround, references_surround)
 
 
-def compute_in_vs_out(roi_processor):
+def compute_in_vs_out(
+    roi_processor: "RoiProcessor",
+    functional: bool = False,
+) -> np.ndarray:
     """Compute the in vs. out feature for each ROI.
 
     The in vs. out feature is the ratio of the dot product of the mask and reference
     image inside the mask to the dot product inside plus outside the mask.
+
+    Parameters
+    ----------
+    roi_processor : RoiProcessor
+        The roi_processor instance to compute the in vs. out feature for.
+    functional : bool, optional
+        Whether to compute the in vs. out feature between the masks and functional reference images.
+        Default is False.
 
     Returns
     -------
@@ -121,7 +183,10 @@ def compute_in_vs_out(roi_processor):
     utils.in_vs_out : Function that computes the in vs. out feature values.
     """
     centered_masks = roi_processor.centered_masks
-    centered_references = roi_processor.centered_references
+    if functional:
+        centered_references = roi_processor.centered_references_functional
+    else:
+        centered_references = roi_processor.centered_references
     iterations = roi_processor.parameters["surround_iterations"]
     return in_vs_out(centered_masks, centered_references, iterations=iterations)
 
@@ -132,6 +197,14 @@ PIPELINE_METHODS = dict(
     dot_product=compute_dot_product,
     corr_coef=compute_corr_coef,
     in_vs_out=compute_in_vs_out,
+)
+
+# Functional features are really just there to check if the red signal is
+# coming from background green signal (e.g. bright highly active cells). So
+# right now we only need the dot product pipeline which emphasizes this
+# aspect of the functional reference image.
+FUNCTIONAL_PIPELINE_METHODS = dict(
+    dot_product=compute_dot_product,
 )
 
 # Mapping of feature pipelines to dependencies on attributes of roi_processor instances
@@ -155,3 +228,11 @@ for name, method in PIPELINE_METHODS.items():
     dependencies = PIPELINE_DEPENDENCIES[name]
     pipeline = FeaturePipeline(name, method, dependencies)
     standard_pipelines.append(pipeline)
+
+# Create a list of functional pipelines
+functional_pipelines = []
+for name, method in FUNCTIONAL_PIPELINE_METHODS.items():
+    dependencies = PIPELINE_DEPENDENCIES[name]
+    method_on_functional = partial(method, functional=True)
+    pipeline = FeaturePipeline("functional_" + name, method_on_functional, dependencies)
+    functional_pipelines.append(pipeline)
