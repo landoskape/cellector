@@ -70,14 +70,14 @@ class SelectionGUI:
     def _init_image_layers(self) -> None:
         """Initialize the image layers in the napari viewer."""
         self.reference = self.viewer.add_image(
-            np.stack(self.roi_processor.references),
+            self.roi_processor.reference,
             name="reference",
             blending="additive",
             opacity=0.6,
         )
-        if self.roi_processor.functional_references is not None:
+        if self.roi_processor.functional_reference is not None:
             self.functional_reference = self.viewer.add_image(
-                np.stack(self.roi_processor.functional_references),
+                self.roi_processor.functional_reference,
                 name="functional_reference",
                 blending="additive",
                 colormap="green",
@@ -180,7 +180,7 @@ class SelectionGUI:
             "enable_all": ("Enable All Features", self._enable_all_features),
         }
 
-        if self.roi_processor.functional_references is not None:
+        if self.roi_processor.functional_reference is not None:
             buttons.pop("toggle_reference")
 
         self.buttons = {}
@@ -211,23 +211,23 @@ class SelectionGUI:
         idx_cursor = self.idx_cursor
         image_data = np.zeros(
             (
-                self.roi_processor.num_planes,
+                self.roi_processor.lz,
                 self.roi_processor.ly,
                 self.roi_processor.lx,
             ),
             dtype=float,
         )
 
-        for iroi, (plane, lam, ypix, xpix) in enumerate(
+        for iroi, (zpix, lam, ypix, xpix) in enumerate(
             zip(
-                self.roi_processor.plane_idx,
+                self.roi_processor.zpix,
                 self.roi_processor.lam,
                 self.roi_processor.ypix,
                 self.roi_processor.xpix,
             )
         ):
             if idx_cursor[iroi]:
-                image_data[plane, ypix, xpix] += lam
+                image_data[zpix, ypix, xpix] += lam
 
         return image_data
 
@@ -249,22 +249,22 @@ class SelectionGUI:
         idx_cursor = self.idx_cursor
         label_data = np.zeros(
             (
-                self.roi_processor.num_planes,
+                self.roi_processor.lz,
                 self.roi_processor.ly,
                 self.roi_processor.lx,
             ),
             dtype=int,
         )
 
-        for iroi, (plane, ypix, xpix) in enumerate(
+        for iroi, (zpix, ypix, xpix) in enumerate(
             zip(
-                self.roi_processor.plane_idx,
+                self.roi_processor.zpix,
                 self.roi_processor.ypix,
                 self.roi_processor.xpix,
             )
         ):
             if idx_cursor[iroi]:
-                label_data[plane, ypix, xpix] = iroi + 1
+                label_data[zpix, ypix, xpix] = iroi + 1
 
         return label_data
 
@@ -333,7 +333,7 @@ class SelectionGUI:
         self.h_values_maximum = {}
 
         idx_cursor_by_plane = utils.split_planes(
-            self.idx_cursor, self.roi_processor.rois_per_plane
+            self.idx_cursor, self.roi_processor.zpix
         )
         for feature_name, feature_values in self.manager.features.items():
             # Compute bin edges for the feature
@@ -342,7 +342,7 @@ class SelectionGUI:
 
             # Compute histograms for each plane
             features_by_plane = utils.split_planes(
-                feature_values, self.roi_processor.rois_per_plane
+                feature_values, self.roi_processor.zpix
             )
             cursor_by_plane = [
                 fbp[idx] for fbp, idx in zip(features_by_plane, idx_cursor_by_plane)
@@ -512,15 +512,15 @@ class SelectionGUI:
 
         # Update histograms for cells in the cursor
         features_by_plane = {
-            key: utils.split_planes(value, self.roi_processor.rois_per_plane)
+            key: utils.split_planes(value, self.roi_processor.zpix)
             for key, value in self.manager.features.items()
         }
         idx_cursor_by_plane = utils.split_planes(
-            self.idx_cursor, self.roi_processor.rois_per_plane
+            self.idx_cursor, self.roi_processor.zpix
         )
 
         for feature in self.manager.features:
-            for iplane in range(self.roi_processor.num_planes):
+            for iplane in range(self.roi_processor.lz):
                 c_feature_values = features_by_plane[feature][iplane][
                     idx_cursor_by_plane[iplane]
                 ]
