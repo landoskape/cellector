@@ -60,26 +60,27 @@ def compute_phase_correlation(
     --------
     utils.phase_correlation_zero : Function that computes the phase correlation values.
     """
-    # Input to phase correlation is centered masks and centered references
+    # Input to phase correlation is centered masks and centered reference
     centered_masks = roi_processor.centered_masks
     if functional:
-        centered_references = roi_processor.centered_references_functional
+        centered_reference = roi_processor.centered_reference_functional
     else:
-        centered_references = roi_processor.centered_references
+        centered_reference = roi_processor.centered_reference
 
-    # Window the centered masks and references
+    # Window the centered masks and reference
     windowed_masks = filter(
         centered_masks, "window", kernel=roi_processor.parameters["window_kernel"]
     )
-    windowed_references = filter(
-        centered_references, "window", kernel=roi_processor.parameters["window_kernel"]
+    windowed_reference = filter(
+        centered_reference, "window", kernel=roi_processor.parameters["window_kernel"]
     )
 
     # Phase correlation requires windowing
     return phase_correlation_zero(
         windowed_masks,
-        windowed_references,
+        windowed_reference,
         eps=roi_processor.parameters["phase_corr_eps"],
+        volumetric=roi_processor.volumetric,
     )
 
 
@@ -106,17 +107,23 @@ def compute_dot_product(
     See Also
     --------
     utils.dot_product : Function that computes the dot product values.
-    utils.dot_product_array : Alternative that uses mask images instead of weights and pixel indices.
     """
     lam = roi_processor.lam
     ypix = roi_processor.ypix
     xpix = roi_processor.xpix
-    plane_idx = roi_processor.plane_idx
+    zpix = roi_processor.zpix
     if functional:
-        filtered_references = roi_processor.filtered_references_functional
+        filtered_reference = roi_processor.filtered_reference_functional
     else:
-        filtered_references = roi_processor.filtered_references
-    return dot_product(lam, ypix, xpix, plane_idx, filtered_references)
+        filtered_reference = roi_processor.filtered_reference
+    return dot_product(
+        lam,
+        ypix,
+        xpix,
+        zpix,
+        filtered_reference,
+        volumetric=roi_processor.volumetric,
+    )
 
 
 def compute_corr_coef(
@@ -144,16 +151,23 @@ def compute_corr_coef(
     """
     centered_masks = roi_processor.centered_masks
     if functional:
-        filtered_centered_references = (
-            roi_processor.filtered_centered_references_functional
+        filtered_centered_reference = (
+            roi_processor.filtered_centered_reference_functional
         )
     else:
-        filtered_centered_references = roi_processor.filtered_centered_references
+        filtered_centered_reference = roi_processor.filtered_centered_reference
     iterations = roi_processor.parameters["surround_iterations"]
-    masks_surround, references_surround = surround_filter(
-        centered_masks, filtered_centered_references, iterations=iterations
+    masks_surround, reference_surround = surround_filter(
+        centered_masks,
+        filtered_centered_reference,
+        iterations=iterations,
+        volumetric=roi_processor.volumetric,
     )
-    return compute_correlation(masks_surround, references_surround)
+    return compute_correlation(
+        masks_surround,
+        reference_surround,
+        volumetric=roi_processor.volumetric,
+    )
 
 
 def compute_in_vs_out(
@@ -184,11 +198,16 @@ def compute_in_vs_out(
     """
     centered_masks = roi_processor.centered_masks
     if functional:
-        centered_references = roi_processor.centered_references_functional
+        centered_reference = roi_processor.centered_reference_functional
     else:
-        centered_references = roi_processor.centered_references
+        centered_reference = roi_processor.centered_reference
     iterations = roi_processor.parameters["surround_iterations"]
-    return in_vs_out(centered_masks, centered_references, iterations=iterations)
+    return in_vs_out(
+        centered_masks,
+        centered_reference,
+        iterations=iterations,
+        volumetric=roi_processor.volumetric,
+    )
 
 
 # Mapping of feature pipelines to their corresponding methods

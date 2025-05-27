@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional, Sequence, Callable
+from typing import List, Tuple, Optional, Sequence, Callable, Union
 import warnings
 import functools
 import numpy as np
@@ -92,42 +92,14 @@ def transpose(sequence: Sequence) -> List:
     return map(list, zip(*sequence))
 
 
-def get_roi_data(
-    stat: List[dict],
-) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
-    """Get ROI data from a list of stat objects.
-
-    stat is a list of dictionaries describing the statistics of ROIs. Just like the
-    standard output of suite2p, the dictionaries should contain the following keys:
-    - "lam": intensity values for each pixel in the ROI
-    - "ypix": y-coordinates of pixels in the ROI
-    - "xpix": x-coordinates of pixels in the ROI
-
-    This function is simply a convenience function to extract the data from the list
-    of dictionaries and return them as separate lists for each key.
-
-    Parameters
-    ----------
-    stat : list of dict
-        List of dictionaries containing ROI data (including "lam", "ypix", "xpix").
-
-    Returns
-    -------
-    lam, ypix, xpix : tuple of list
-        Lists of intensity values, y-coordinates, and x-coordinates for each ROI.
-    """
-    lam = [s["lam"] for s in stat]
-    ypix = [s["ypix"] for s in stat]
-    xpix = [s["xpix"] for s in stat]
-    return lam, ypix, xpix
-
-
-def cat_planes(list_of_sequences: List[Sequence]) -> List[Sequence]:
+def cat_planes(
+    list_of_sequences: List[Union[Sequence, np.ndarray]],
+) -> List[Union[Sequence, np.ndarray]]:
     """Concatenate a sequence of sequences into a single sequence.
 
     Parameters
     ----------
-    sequence : list of sequences
+    list_of_sequences : List[Union[Sequence, np.ndarray]]
         A list of sequences to concatenate.
 
     Returns
@@ -141,46 +113,52 @@ def cat_planes(list_of_sequences: List[Sequence]) -> List[Sequence]:
     This function is used to concatenate list of ROI data from across planes
     because we can optimize operations by performing them on all ROIs at once
     rather than performing them on each plane separately. To return to lists
-    of each plane independently, use the split_planes function.
+    of each plane independently, use the split_planes function. Note that
+    cat_planes and split_planes are not inverse operations unless the ROIs
+    start in order of planes.
     """
     if all(isinstance(seq, np.ndarray) for seq in list_of_sequences):
         return np.concatenate(list_of_sequences)
     return [item for subsequence in list_of_sequences for item in subsequence]
 
 
-def split_planes(sequence: Sequence, num_per_plane: List[int]) -> List[Sequence]:
+def split_planes(array: np.ndarray, plane_idx: np.ndarray) -> List[np.ndarray]:
     """
-    Split a sequence into a list of sequences based on the number of elements per plane.
+    Split a numpy array into a list of numpy arrays based on the plane index.
 
     Parameters
     ----------
-    sequence : list
-        A single sequence to split into multiple sequences.
-    num_per_plane : list
-        A list of integers indicating the number of elements per plane.
+    array : np.ndarray
+        A single numpy array to split into multiple numpy arrays.
+    plane_idx : np.ndarray
+        An array of integers indicating the plane index for each element in the sequence.
 
     Returns
     -------
     list
-        A list of sequences, each containing the elements for a single plane.
+        A list of numpy arrays, each containing the elements for a single plane.
 
     Notes
     -----
     This function is used to split concatenated ROI data back into separate
     lists for each plane after operations have been performed on all ROIs at once
-    using the cat_planes function.
+    using the cat_planes function. It is not the inverse of cat_planes, because
+    ROIs need not be contiguous but cat_planes will just concatenate them!
     """
-    return [
-        sequence[sum(num_per_plane[:i]) : sum(num_per_plane[: i + 1])]
-        for i in range(len(num_per_plane))
-    ]
+    max_plane = np.max(plane_idx)
+    array_by_plane = []
+    for plane in range(max_plane + 1):
+        idx_to_plane = plane_idx == plane
+        array_by_plane.append(array[idx_to_plane])
+    return array_by_plane
 
 
 def flatten_roi_data(
     lam: List[np.ndarray],
     ypix: List[np.ndarray],
     xpix: List[np.ndarray],
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    zpix: Optional[List[np.ndarray]] = None,
+) -> dict[str, np.ndarray]:
     """Get flattened ROI data for use in parallel processing.
 
     Returns flattened arrays for intensity values, y-coordinates, x-coordinates in which
@@ -192,6 +170,9 @@ def flatten_roi_data(
     ----------
     lam : list of np.ndarrays
         Intensity values for each pixel in each ROI.
+    zpix : list of np.ndarrays | np.ndarray
+        Z-coordinates for each ROI. If 2D data, this should be a single np.ndarray of the z-plane.
+        If volumetric data, this should be a list of np.ndarrays, one for each ROI.
     ypix : list of np.ndarrays
         Y-coordinates of pixels in each ROI.
     xpix : list of np.ndarrays
@@ -199,19 +180,30 @@ def flatten_roi_data(
 
     Returns
     -------
-    lam_flat, ypix_flat, xpix_flat, roi_idx : tuple of np.ndarrays
-        Flattened arrays for intensity values, y-coordinates, x-coordinates, and ROI index
-        associated with each lam/y/x value.
+    dict
+        A dictionary containing the flattened arrays for intensity values, z-coordinates, y-coordinates,
+        x-coordinates, and ROI index associated with each lam/z/y/x value. If zpix is not provided, then
+        it will not be included in the output dictionary.
     """
     lam_flat = np.concatenate(lam)
     ypix_flat = np.concatenate(ypix)
     xpix_flat = np.concatenate(xpix)
     roi_idx = np.repeat(np.arange(len(lam)), [len(arr) for arr in lam])
-    return lam_flat, ypix_flat, xpix_flat, roi_idx
+    output = dict(
+        lam_flat=lam_flat,
+        ypix_flat=ypix_flat,
+        xpix_flat=xpix_flat,
+        roi_idx=roi_idx,
+    )
+    if zpix is not None:
+        zpix_flat = np.concatenate(zpix)
+        output["zpix_flat"] = zpix_flat
+    return output
 
 
 def get_roi_centroid(
     lam: np.ndarray,
+    zpix: np.ndarray | int,
     ypix: np.ndarray,
     xpix: np.ndarray,
     method: str = "weightedmean",
@@ -223,6 +215,9 @@ def get_roi_centroid(
     ----------
     lam : np.ndarray
         Intensity values for each pixel in the ROI.
+    zpix : np.ndarray | int
+        Z-coordinates of pixels in the ROI for volumetric data, or just
+        the z-plane for 2D data.
     ypix : np.ndarray
         Y-coordinates of pixels in the ROI.
     xpix : np.ndarray
@@ -237,27 +232,36 @@ def get_roi_centroid(
 
     Returns
     -------
-    yc, xc : tuple of int or float
-        Y and X coordinates of the centroid. Returns as integers by default,
+    zc, yc, xc : tuple of int or float
+        Z, Y, and X coordinates of the centroid. Returns as integers by default,
         but will return floats if asint=False and method="weightedmean".
     """
     if method == "weightedmean":
+        if isinstance(zpix, np.ndarray):
+            zc = np.sum(lam * zpix) / np.sum(lam)
+        else:
+            zc = zpix
         yc = np.sum(lam * ypix) / np.sum(lam)
         xc = np.sum(lam * xpix) / np.sum(lam)
         if asint:
-            yc, xc = int(yc), int(xc)
+            zc, yc, xc = int(zc), int(yc), int(xc)
     elif method == "median":
+        if isinstance(zpix, np.ndarray):
+            zc = int(np.median(zpix))
+        else:
+            zc = int(zpix)
         yc = int(np.median(ypix))
         xc = int(np.median(xpix))
     else:
         raise ValueError(
             f"Invalid method ({method}). Must be 'weightedmean' or 'median'"
         )
-    return yc, xc
+    return zc, yc, xc
 
 
 def get_roi_centroids(
     lam: List[np.ndarray],
+    zpix: np.ndarray | List[np.ndarray],
     ypix: List[np.ndarray],
     xpix: List[np.ndarray],
     method: str = "weightedmean",
@@ -269,6 +273,10 @@ def get_roi_centroids(
     ----------
     lam : list of np.ndarrays
         Intensity values for each pixel in each ROI.
+    zpix : np.ndarray | list of np.ndarrays
+        Z-coordinates of each ROI -- if volumetric data this is a list of np.ndarrays
+        for each ROI, if not volumetric this is a single np.ndarray of the z-plane for
+        each ROI.
     ypix : list of np.ndarrays
         Y-coordinates of pixels in each ROI.
     xpix : list of np.ndarrays
@@ -283,8 +291,8 @@ def get_roi_centroids(
 
     Returns
     -------
-    yc, xc : tuple of np.ndarrays of int or float
-        Y and X coordinates of each ROI centroid. Returns as integers by default,
+    zc, yc, xc : tuple of np.ndarrays of int or float
+        Z, Y, and X coordinates of each ROI centroid. Returns as integers by default,
         but will return floats if asint=False and method="weightedmean".
 
     See Also
@@ -292,20 +300,18 @@ def get_roi_centroids(
     get_roi_centroid : The underlying function for centroid calculation.
     """
     centroids = [
-        get_roi_centroid(l, y, x, method=method, asint=asint)
-        for (l, y, x) in zip(lam, ypix, xpix)
+        get_roi_centroid(l, z, y, x, method=method, asint=asint)
+        for (l, z, y, x) in zip(lam, zpix, ypix, xpix)
     ]
-    yc, xc = transpose(centroids)
-    return yc, xc
+    zc, yc, xc = transpose(centroids)
+    return zc, yc, xc
 
 
 def get_mask_volume(
-    lam: np.ndarray,
-    ypix: np.ndarray,
-    xpix: np.ndarray,
-    roi_idx: np.ndarray,
+    flattened_roi_data: dict[str, np.ndarray],
     num_rois: int,
     shape: Tuple[int, int],
+    volumetric: bool = False,
 ) -> np.ndarray:
     """Create a mask stack using Numba for parallel processing.
 
@@ -316,30 +322,53 @@ def get_mask_volume(
 
     Parameters
     ----------
-    lam : np.ndarray
-        Intensity values for each pixel in each ROI.
-        In format (num_pixels,) with values from each ROI concatenated with each other.
-    ypix : np.ndarray
-        Y-coordinates of pixels in each ROI.
-        Same format as lam.
-    xpix : np.ndarray
-        X-coordinates of pixels in each ROI.
-        Same format as lam.
-    roi_idx : np.ndarray
-        ROI index for each value in lam, ypix, xpix
+    flattened_roi_data : dict[str, np.ndarray]
+        lam_flat : np.ndarray
+            Intensity values for each pixel in each ROI.
+            In format (num_pixels,) with values from each ROI concatenated with each other.
+        zpix : np.ndarray
+            Z-coordinates of pixels in each ROI.
+            Same format as lam.
+        ypix_flat : np.ndarray
+            Y-coordinates of pixels in each ROI.
+            Same format as lam.
+        xpix_flat : np.ndarray
+            X-coordinates of pixels in each ROI.
+            Same format as lam.
+        roi_idx : np.ndarray
+            ROI index for each value in lam, ypix, xpix
     num_rois : int
         Number of ROIs described in the input arrays.
     shape : tuple of int
         Shape of the mask stack to create (height and width).
+    volumetric : bool, optional
+        Whether the data is volumetric. If True, will include all planes. Default is False.
 
     Returns
     -------
     np.ndarray
-        A 3D mask stack with shape (num_rois, height, width) where the mask footprints
-        are filled in with the intensity values (lam) and zeros elsewhere.
+        A stack of masks images for each ROI.
+        If volumetric=False, has shape (num_rois, height, width).
+        If volumetric=True, has shape (num_rois, num_planes, height, width).
     """
     mask_stack = np.zeros((num_rois, *shape), dtype=np.float32)
-    return _nb_get_mask_volume(lam, ypix, xpix, roi_idx, mask_stack)
+    if volumetric:
+        return _nb_get_mask_volume_volumetric(
+            flattened_roi_data["lam_flat"],
+            flattened_roi_data["zpix_flat"],
+            flattened_roi_data["ypix_flat"],
+            flattened_roi_data["xpix_flat"],
+            flattened_roi_data["roi_idx"],
+            mask_stack,
+        )
+    else:
+        return _nb_get_mask_volume(
+            flattened_roi_data["lam_flat"],
+            flattened_roi_data["ypix_flat"],
+            flattened_roi_data["xpix_flat"],
+            flattened_roi_data["roi_idx"],
+            mask_stack,
+        )
 
 
 @nb.njit(parallel=True)
@@ -365,13 +394,12 @@ def _nb_get_mask_volume(
 
 
 def get_centered_masks(
-    lam: np.ndarray,
-    ypix: np.ndarray,
-    xpix: np.ndarray,
-    roi_idx: np.ndarray,
-    centroids: Tuple[np.ndarray, np.ndarray],
+    flattened_roi_data: dict[str, np.ndarray],
+    centroids: dict[str, np.ndarray],
     width: Optional[int] = 15,
     fill_value: Optional[float] = 0.0,
+    num_planes: Optional[int] = None,
+    volumetric: bool = False,
 ) -> np.ndarray:
     """Create a stack of centered masks for each ROI.
 
@@ -383,33 +411,65 @@ def get_centered_masks(
 
     Parameters
     ----------
-    lam : np.ndarray
-        Intensity values for each pixel in each ROI.
-        In format (num_pixels,) with values from each ROI concatenated with each other.
-    ypix : np.ndarray
-        Y-coordinates of pixels in each ROI.
-        Same format as lam.
-    xpix : np.ndarray
-        X-coordinates of pixels in each ROI.
-        Same format as lam.
-    roi_idx : np.ndarray
-        ROI index for each value in lam, ypix, xpix
-    centroids : Tuple[np.ndarray, np.ndarray]
-        Tuple of y and x centroids for each ROI.
+    flattened_roi_data : dict[str, np.ndarray]
+        lam : np.ndarray
+            Intensity values for each pixel in each ROI.
+            In format (num_pixels,) with values from each ROI concatenated with each other.
+        zpix : np.ndarray
+            Z-coordinates of pixels in each ROI.
+            Same format as lam.
+        ypix : np.ndarray
+            Y-coordinates of pixels in each ROI.
+            Same format as lam.
+        xpix : np.ndarray
+            X-coordinates of pixels in each ROI.
+            Same format as lam.
+        roi_idx : np.ndarray
+            ROI index for each value in lam, ypix, xpix, zpix
+    centroids : dict[str, np.ndarray]
+        Dictionary of z, y, and x centroids for each ROI.
     width : int, optional
         Width in pixels around the ROI centroid. Default is 15.
     fill_value : float, optional
         Value to use as the background. Default is 0.0.
+    num_planes : int, optional
+        Number of planes in the data. Required if ``volumetric`` is True.
+    volumetric : bool, optional
+        Whether the data is volumetric. If True, will include all planes. Default is False.
 
     Returns
     -------
     np.ndarray
-        A 3D stack of centered masks for each ROI with shape (num_rois, 2 * width + 1, 2 * width + 1).
+        A stack of centered masks for each ROI.
+        If volumetric=False, has shape (num_rois, 2 * width + 1, 2 * width + 1).
+        If volumetric=True, has shape (num_rois, num_planes, 2 * width + 1, 2 * width + 1).
     """
-    yc, xc = centroids
-    mask_stack = _nb_get_centered_masks(
-        lam, ypix, xpix, roi_idx, yc, xc, width, fill_value
-    )
+    if volumetric and num_planes is None:
+        raise ValueError("num_planes must be provided if volumetric is True")
+    if volumetric:
+        mask_stack = _nb_get_centered_masks_volumetric(
+            flattened_roi_data["lam_flat"],
+            flattened_roi_data["zpix_flat"],
+            flattened_roi_data["ypix_flat"],
+            flattened_roi_data["xpix_flat"],
+            flattened_roi_data["roi_idx"],
+            centroids["yc"],
+            centroids["xc"],
+            width,
+            fill_value,
+            num_planes,
+        )
+    else:
+        mask_stack = _nb_get_centered_masks(
+            flattened_roi_data["lam_flat"],
+            flattened_roi_data["ypix_flat"],
+            flattened_roi_data["xpix_flat"],
+            flattened_roi_data["roi_idx"],
+            centroids["yc"],
+            centroids["xc"],
+            width,
+            fill_value,
+        )
     return mask_stack
 
 
@@ -442,18 +502,37 @@ def _nb_get_centered_masks(
     return mask_stack
 
 
-# Might use in a nonumba mode, dispatched by centered_mask_stack
-# def _nonumba_get_centered_masks(lam, ypix, xpix, centroids, width=15, fill_value=0.0):
-#     """Create a stack of centered masks for each ROI."""
-#     yc, xc = centroids
-#     num_rois = len(lam)
-#     mask_stack = np.full((num_rois, 2 * width + 1, 2 * width + 1), fill_value, dtype=np.float32)
-#     for idx, (yc_i, xc_i) in enumerate(zip(yc, xc)):
-#         cyidx = ypix[idx] - yc_i + width
-#         cxidx = xpix[idx] - xc_i + width
-#         idx_use_points = (cyidx >= 0) & (cyidx < 2 * width + 1) & (cxidx >= 0) & (cxidx < 2 * width + 1)
-#         mask_stack[idx, cyidx[idx_use_points], cxidx[idx_use_points]] = lam[idx][idx_use_points]
-#     return mask_stack
+@nb.njit(parallel=True)
+def _nb_get_centered_masks_volumetric(
+    lam: np.ndarray,
+    zpix: np.ndarray,
+    ypix: np.ndarray,
+    xpix: np.ndarray,
+    roi_idx: np.ndarray,
+    yc: np.ndarray,
+    xc: np.ndarray,
+    width: int,
+    fill_value: float,
+    num_planes: int,
+) -> np.ndarray:
+    """Create a stack of centered masks volumes for each ROI using Numba for parallel processing."""
+    mask_stack = np.full(
+        (len(yc), num_planes, 2 * width + 1, 2 * width + 1),
+        fill_value,
+        dtype=np.float32,
+    )
+    for idx in nb.prange(len(lam)):
+        c_yc, c_xc = yc[roi_idx[idx]], xc[roi_idx[idx]]
+        cyidx = ypix[idx] - c_yc + width
+        cxidx = xpix[idx] - c_xc + width
+        if (
+            cyidx >= 0
+            and cyidx < 2 * width + 1
+            and cxidx >= 0
+            and cxidx < 2 * width + 1
+        ):
+            mask_stack[roi_idx[idx], zpix[idx], cyidx, cxidx] = lam[idx]
+    return mask_stack
 
 
 def _get_roi_bounds(
@@ -515,65 +594,77 @@ def _get_roi_bounds(
     return start, end, start_offset, end_offset
 
 
-def get_centered_references(
-    references: List[np.ndarray],
-    plane_idx: List[int],
-    centroids: Tuple[List[int]],
+def get_centered_reference(
+    reference: np.ndarray,
+    centroids: dict[str, np.ndarray],
     width: Optional[int] = 15,
     fill_value: Optional[float] = 0.0,
+    volumetric: bool = False,
 ) -> np.ndarray:
     """Create a stack of centered reference images on each ROI.
 
     Parameters
     ----------
-    references : List[np.ndarray]
-        List of reference images for each plane.
-    plane_idx : List[int]
-        List of plane indices for each ROI.
-    centroids : Tuple[np.ndarray, np.ndarray]
-        Tuple of y and x centroids for each ROI.
+    reference : np.ndarray
+        Reference images for each plane (stack of 2D images).
+    centroids : dict[str, np.ndarray]
+        Dictionary of z, y, and x centroids for each ROI.
     width : int, optional
         Width in pixels around the ROI centroid. Default is 15.
     fill_value : float, optional
         Value to use as the background. Default is 0.0.
+    volumetric : bool, optional
+        Whether the data is volumetric. If True, will include all planes. Default is False.
 
     Returns
     -------
     np.ndarray
-        A 3D stack of centered reference images for each ROI
-        with shape (num_rois, 2 * width + 1, 2 * width + 1).
+        A 3D stack of centered reference images for each ROI.
+        If volumetric=False, has shape (num_rois, 2 * width + 1, 2 * width + 1).
+        If volumetric=True, has shape (num_rois, num_planes, 2 * width + 1, 2 * width + 1).
     """
     if not isinstance(width, int) or width < 0:
         raise ValueError("Width must be a non-negative integer")
 
-    # Split centroids into y and x coordinates
-    yc, xc = centroids
-
     # Preallocate reference stack array
-    num_rois = len(plane_idx)
-    ref_stack = np.full(
-        (num_rois, 2 * width + 1, 2 * width + 1), fill_value, dtype=np.float32
-    )
+    num_rois = len(centroids["yc"])
+    num_planes = reference.shape[0]
+    if volumetric:
+        ref_stack = np.full(
+            (num_rois, num_planes, 2 * width + 1, 2 * width + 1),
+            fill_value,
+            dtype=np.float32,
+        )
+    else:
+        ref_stack = np.full(
+            (num_rois, 2 * width + 1, 2 * width + 1), fill_value, dtype=np.float32
+        )
 
     # For each ROI, fill in a patch of the appropriate reference image into the centered_stack array
     for idx in range(num_rois):
         ystart, yend, ystart_offset, yend_offset = _get_roi_bounds(
-            yc[idx], width, references[plane_idx[idx]].shape[0]
+            centroids["yc"][idx], width, reference[centroids["zc"][idx]].shape[0]
         )
         xstart, xend, xstart_offset, xend_offset = _get_roi_bounds(
-            xc[idx], width, references[plane_idx[idx]].shape[1]
+            centroids["xc"][idx], width, reference[centroids["zc"][idx]].shape[1]
         )
         y_centered_slice = slice(ystart_offset, 2 * width + 1 + yend_offset)
         x_centered_slice = slice(xstart_offset, 2 * width + 1 + xend_offset)
-        ref_stack[idx, y_centered_slice, x_centered_slice] = references[plane_idx[idx]][
-            ystart:yend, xstart:xend
-        ]
+        if volumetric:
+            ref_stack[idx, :, y_centered_slice, x_centered_slice] = reference[
+                :, ystart:yend, xstart:xend
+            ]
+        else:
+            ref_stack[idx, y_centered_slice, x_centered_slice] = reference[
+                centroids["zc"][idx]
+            ][ystart:yend, xstart:xend]
     return ref_stack
 
 
 def center_surround(
     centered_masks: np.ndarray,
     iterations: Optional[int] = 7,
+    volumetric: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Calculate the center and surround footprints of a stack of centered masks.
 
@@ -586,8 +677,12 @@ def center_surround(
     ----------
     centered_masks : np.ndarray
         The centered mask images for each ROI. Should have shape (num_rois, height, width).
+        If volumetric=True, should have shape (num_rois, num_planes, height, width).
     iterations : int, optional
         The number of iterations for the binary dilation. Default is 7.
+    volumetric : bool, optional
+        Whether the data is volumetric. If True, will include the z-axis
+        in the computation. Default is False.
 
     Returns
     -------
@@ -598,13 +693,22 @@ def center_surround(
     center = np.where(centered_masks > 0, 1, 0)
 
     # This structuring element allows parallelization across ROIs without interference
-    stack_structure = np.stack(
-        (
-            np.zeros((3, 3), dtype=bool),
-            generate_binary_structure(2, 1),
-            np.zeros((3, 3), dtype=bool),
+    if volumetric:
+        stack_structure = np.stack(
+            (
+                np.zeros((3, 3, 3), dtype=bool),
+                generate_binary_structure(3, 1),
+                np.zeros((3, 3, 3), dtype=bool),
+            )
         )
-    )
+    else:
+        stack_structure = np.stack(
+            (
+                np.zeros((3, 3), dtype=bool),
+                generate_binary_structure(2, 1),
+                np.zeros((3, 3), dtype=bool),
+            )
+        )
     surround = binary_dilation(center, structure=stack_structure, iterations=iterations)
 
     # Return as boolean arrays for use in indices and as masks
@@ -615,6 +719,7 @@ def surround_filter(
     centered_masks: np.ndarray,
     centered_references: np.ndarray,
     iterations: Optional[int] = 7,
+    volumetric: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Filter centered masks and references to include only the surround region of each mask.
 
@@ -631,6 +736,9 @@ def surround_filter(
         The centered reference images around each ROI. Should have shape (num_rois, height, width).
     iterations : int, optional
         The number of iterations for the binary dilation. Default is 7.
+    volumetric : bool, optional
+        Whether the data is volumetric. If True, will include the z-axis
+        in the computation. Default is False.
 
     Returns
     -------
@@ -638,7 +746,11 @@ def surround_filter(
         The centered mask and reference images for the surround region of each ROI.
         Anything outside the surround region will be filled with np.nan.
     """
-    surround = center_surround(centered_masks, iterations=iterations)[1]
+    surround = center_surround(
+        centered_masks,
+        iterations=iterations,
+        volumetric=volumetric,
+    )[1]
     masks_surround = np.where(surround, centered_masks, np.nan)
     references_surround = np.where(surround, centered_references, np.nan)
     return masks_surround, references_surround
@@ -648,6 +760,7 @@ def cross_power_spectrum(
     static_image: np.ndarray,
     moving_image: np.ndarray,
     eps: float = 1e6,
+    volumetric: bool = False,
 ) -> np.ndarray:
     """Measure the cross-power spectrum between two images.
 
@@ -667,6 +780,9 @@ def cross_power_spectrum(
         The moving image. This image is shifted and the resulting phase correlation is measured.
     eps : float, optional
         Small value to avoid division by zero. Default is 1e-8.
+    volumetric : bool, optional
+        Whether to compute the cross-power spectrum for volumetric data. If so, will include the z-axis
+        in the computation. Default is False.
 
     Returns
     -------
@@ -679,9 +795,16 @@ def cross_power_spectrum(
     if static_image.shape[-2:] != moving_image.shape[-2:]:
         raise ValueError("Images must have the same shape in the last two dimensions.")
 
+    if volumetric:
+        axis = (-3, -2, -1)
+        if static_image.shape[-3] != moving_image.shape[-3]:
+            raise ValueError("Volumetric images must have the same number of planes.")
+    else:
+        axis = (-2, -1)
+
     # measure cross-power-spectrum
-    fft_static = np.fft.fft2(static_image, axes=(-2, -1))
-    fft_moving_conj = np.conj(np.fft.fft2(moving_image, axes=(-2, -1)))
+    fft_static = np.fft.fft2(static_image, axes=axis)
+    fft_moving_conj = np.conj(np.fft.fft2(moving_image, axes=axis))
     R = fft_static * fft_moving_conj
     R /= eps + np.abs(R)
     return R
@@ -732,6 +855,7 @@ def phase_correlation_zero(
     centered_masks: np.ndarray,
     centered_reference: np.ndarray,
     eps: float = 1e6,
+    volumetric: bool = False,
 ) -> np.ndarray:
     """Measure the zero-offset phase correlation between two images.
 
@@ -756,6 +880,9 @@ def phase_correlation_zero(
         The centered reference image (centered on each ROI).
     eps : float, optional
         Offset value to avoid division by zero. Default is 1e6.
+    volumetric : bool, optional
+        Whether to compute the phase correlation for volumetric data. If so, will include the z-axis
+        in the computation. Default is False.
 
     Returns
     -------
@@ -768,8 +895,16 @@ def phase_correlation_zero(
     --------
     phase_correlation : Full version that returns the entire correlation map.
     """
-    R = cross_power_spectrum(centered_masks, centered_reference, eps=eps)
-    center_value = np.sum(R, axis=(-2, -1)) / (R.shape[-2] * R.shape[-1])
+    R = cross_power_spectrum(
+        centered_masks,
+        centered_reference,
+        eps=eps,
+        volumetric=volumetric,
+    )
+    if volumetric:
+        center_value = np.sum(R, axis=(-3, -2, -1)) / np.prod(R.shape[-3:])
+    else:
+        center_value = np.sum(R, axis=(-2, -1)) / np.prod(R.shape[-2:])
     return center_value.real
 
 
@@ -777,6 +912,7 @@ def in_vs_out(
     centered_masks: np.ndarray,
     centered_reference: np.ndarray,
     iterations: int = 7,
+    volumetric: bool = False,
 ) -> np.ndarray:
     """Measure the ratio of the intensity inside the mask to the local intensity surrounding the mask.
 
@@ -792,12 +928,15 @@ def in_vs_out(
 
     Parameters
     ----------
-    centered_masks : np.ndarray with shape (..., M, N)
+    centered_masks : np.ndarray with shape (..., (Z), M, N)
         The centered mask images for each ROI.
-    centered_reference : np.ndarray with shape (..., M, N)
+    centered_reference : np.ndarray with shape (..., (Z), M, N)
         The centered reference image (centered on each ROI).
     iterations : int, optional
         The number of iterations to dilate the mask for the surround. Default is 7.
+    volumetric : bool, optional
+        Whether to compute the in vs. out feature for volumetric data. If so, will include the z-axis
+        in the computation. Default is False.
 
     Returns
     -------
@@ -806,9 +945,17 @@ def in_vs_out(
         Shape will be (N,), where N is the number of ROIs. If the total sum of the inside and
         outside intensities is 0, then the value will return as 0.
     """
-    center, surround = center_surround(centered_masks, iterations=iterations)
-    inside_sum = np.sum(center * centered_reference, axis=(-2, -1))
-    outside_sum = np.sum(surround * centered_reference, axis=(-2, -1))
+    if volumetric:
+        axis = (-3, -2, -1)
+    else:
+        axis = (-2, -1)
+    center, surround = center_surround(
+        centered_masks,
+        iterations=iterations,
+        volumetric=volumetric,
+    )
+    inside_sum = np.sum(center * centered_reference, axis=axis)
+    outside_sum = np.sum(surround * centered_reference, axis=axis)
     total_sum = inside_sum + outside_sum
     total_sum[total_sum == 0] = np.inf
     return inside_sum / total_sum
@@ -818,8 +965,9 @@ def dot_product(
     lam: List[np.ndarray],
     ypix: List[np.ndarray],
     xpix: List[np.ndarray],
-    plane_idx: List,
+    zpix: Union[np.ndarray, List[np.ndarray]],
     reference: np.ndarray,
+    volumetric: bool = False,
 ) -> np.ndarray:
     """Measure the normalized dot product between the masks and the reference images.
 
@@ -827,10 +975,7 @@ def dot_product(
     by the norm of the mask weights. This is a measure of how well the mask points toward
     intensity features in the reference image.
 
-    Uses lam, xpix, ypix instead of mask images for efficiency. This is the best function
-    to use to compute the dot_product feature because it is usually faster, always uses the
-    full ROI mask (whereas part of the mask can be cropped in the centered mask version called
-    dot_product_array), and it requires fewer preprocessing steps.
+    Uses lam, xpix, ypix (and zpix if volumetric=True) instead of mask images for efficiency.
 
     Parameters
     ----------
@@ -840,64 +985,36 @@ def dot_product(
         List of y-pixel indices for each ROI.
     xpix : List[np.ndarray]
         List of x-pixel indices for each ROI.
-    plane_idx : List
-        idx to reference image for each ROI.
-    reference : List[np.ndarray]
-        The reference image.
+    zpix : Union[np.ndarray, List[np.ndarray]]
+        List of plane indices for each ROI, unless volumetric=True, in which case it is a list
+        of z-plane indices for each ROI.
+    reference : np.ndarray
+        The reference images.
+    volumetric : bool, optional
+        Whether to compute the dot product for volumetric data. If so, will include the z-axis
+        in the computation. Default is False.
 
     Returns
     -------
     np.ndarray
         The dot product between the masks and the reference images. Shape will be (N,),
         where N is the number of ROIs.
-
-    See Also
-    --------
-    dot_product_array : Function that uses mask images instead of weights and pixel indices.
     """
     dot_product = np.zeros(len(lam))
-    for idx, (l, y, x, p) in enumerate(zip(lam, ypix, xpix, plane_idx)):
-        ref = reference[p]
-        dot = np.sum(ref[y, x] @ l / np.linalg.norm(l))
+    for idx, (l, y, x, p) in enumerate(zip(lam, ypix, xpix, zpix)):
+        if volumetric:
+            dot = np.sum(reference[p, y, x] @ l / np.linalg.norm(l))
+        else:
+            ref = reference[p]
+            dot = np.sum(ref[y, x] @ l / np.linalg.norm(l))
         dot_product[idx] = dot
     return dot_product
-
-
-def dot_product_array(
-    centered_masks: np.ndarray,
-    centered_reference: np.ndarray,
-) -> np.ndarray:
-    """Measure the normalized dot product between the masks and the reference images.
-
-    Will take the inner product of the mask weights with the reference image, and divide
-    by the norm of the mask weights. This is a measure of how well the mask points toward
-    intensity features in the reference image.
-
-    Parameters
-    ----------
-    centered_masks : np.ndarray with shape (..., M, N)
-        The centered mask images for each ROI.
-    centered_reference : np.ndarray with shape (..., M, N)
-        The centered reference image (centered on each ROI).
-
-    Returns
-    -------
-    np.ndarray
-        The dot product between the masks and the reference images. Shape will be (N,),
-        where N is the number of ROIs.
-
-    See Also
-    --------
-    dot_product : Function that uses mask weights and pixel indices instead of images.
-    """
-    sum = np.sum(centered_masks * centered_reference, axis=(-2, -1))
-    norm = np.linalg.norm(centered_masks, axis=(-2, -1))
-    return sum / norm
 
 
 def compute_correlation(
     centered_masks: np.ndarray,
     centered_references: np.ndarray,
+    volumetric: bool = False,
 ) -> np.ndarray:
     """Measure the correlation coefficient between the masks and the reference images.
 
@@ -910,10 +1027,13 @@ def compute_correlation(
 
     Parameters
     ----------
-    centered_masks : np.ndarray with shape (..., M, N)
+    centered_masks : np.ndarray with shape (..., (Z), M, N)
         The centered mask images for each ROI.
-    centered_reference : np.ndarray with shape (..., M, N)
+    centered_reference : np.ndarray with shape (..., (Z), M, N)
         The centered reference image (centered on each ROI).
+    volumetric : bool, optional
+        Whether the data is volumetric. If True, will include the z-axis
+        in the computation. Default is False.
 
     Returns
     -------
@@ -925,15 +1045,17 @@ def compute_correlation(
     --------
     surround_filter : Function to filter the masks and references to have np.nan outside the ROI.
     """
-    u_ref = np.nanmean(centered_references, axis=(-2, -1), keepdims=True)
-    u_mask = np.nanmean(centered_masks, axis=(-2, -1), keepdims=True)
-    s_ref = np.nanstd(centered_references, axis=(-2, -1))
-    s_mask = np.nanstd(centered_masks, axis=(-2, -1))
-    N = np.sum(~np.isnan(centered_masks), axis=(-2, -1))
+    if volumetric:
+        axis = (-3, -2, -1)
+    else:
+        axis = (-2, -1)
+    u_ref = np.nanmean(centered_references, axis=axis, keepdims=True)
+    u_mask = np.nanmean(centered_masks, axis=axis, keepdims=True)
+    s_ref = np.nanstd(centered_references, axis=axis)
+    s_mask = np.nanstd(centered_masks, axis=axis)
+    N = np.sum(~np.isnan(centered_masks), axis=axis)
     return (
-        np.nansum(
-            (centered_references - u_ref) * (centered_masks - u_mask), axis=(-2, -1)
-        )
+        np.nansum((centered_references - u_ref) * (centered_masks - u_mask), axis=axis)
         / N
         / s_ref
         / s_mask
