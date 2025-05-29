@@ -23,6 +23,9 @@ Here's a minimal example to get you started:
 
    # Create a RoiProcessor instance from suite2p output
    roi_processor = cellector.io.create_from_suite2p("path/to/suite2p/dir")
+   
+   # can also create from a suite3d results directory, everything else should work the same
+   # roi_processor = cellector.io.create_from_suite3d("path/to/suite3d/results/dir")
 
    # Create a CellectorManager instance
    manager = CellectorManager.make_from_roi_processor(roi_processor)
