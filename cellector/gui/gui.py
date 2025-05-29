@@ -276,11 +276,6 @@ class SelectionGUI:
         currently being shown based on the feature cutoffs, manual labels, and the state
         of the GUI (e.g. if the user wants to show control cells, target cells, only
         manual cells, etc).
-
-        Returns
-        -------
-        idx_cursor_by_plane : np.ndarray (bool)
-            The indices of the cursor masks across planes.
         """
         if self.state.only_manual_labels:
             # if only manual labels, ignore the feature criteria
@@ -322,9 +317,6 @@ class SelectionGUI:
             layer.mouse_drag_callbacks.append(self._single_click_label)
             layer.mouse_double_click_callbacks.append(self._double_click_label)
 
-        # Dimension change binding
-        self.viewer.dims.events.connect(self._update_plane_idx)
-
     def _compute_histograms(self) -> None:
         """Compute histograms for all features."""
         self.h_values_full = {}
@@ -332,32 +324,27 @@ class SelectionGUI:
         self.h_bin_edges = {}
         self.h_values_maximum = {}
 
-        idx_cursor_by_plane = utils.split_planes(
-            self.idx_cursor, self.roi_processor.zpix
-        )
         for feature_name, feature_values in self.manager.features.items():
             # Compute bin edges for the feature
             edges = np.histogram(feature_values, bins=self.num_bins)[1]
             self.h_bin_edges[feature_name] = edges
 
+            # Compute histograms for all ROIs
+            self.h_values_full[feature_name] = np.histogram(
+                feature_values,
+                bins=edges,
+            )[0]
+
+            # Compute histograms for selected ROIs (those in the cursor)
+            self.h_values_cursor[feature_name] = np.histogram(
+                feature_values[self.idx_cursor],
+                bins=edges,
+            )[0]
+
             # Compute histograms for each plane
-            features_by_plane = utils.split_planes(
-                feature_values, self.roi_processor.zpix
-            )
-            cursor_by_plane = [
-                fbp[idx] for fbp, idx in zip(features_by_plane, idx_cursor_by_plane)
-            ]
-            self.h_values_full[feature_name] = [
-                np.histogram(plane_values, bins=edges)[0]
-                for plane_values in features_by_plane
-            ]
-            self.h_values_cursor[feature_name] = [
-                np.histogram(plane_values, bins=edges)[0]
-                for plane_values in cursor_by_plane
-            ]
             self.h_values_maximum[feature_name] = np.max(
-                np.concatenate(self.h_values_full[feature_name])
-            )  # Maximum is max counts across all planes
+                self.h_values_full[feature_name]
+            )
 
     def _build_histograms(self) -> None:
         """Build histograms for feature visualization."""
@@ -368,12 +355,12 @@ class SelectionGUI:
         for feature in self.manager.features:
             # Create histogram bars
             full_hist = gui_factory.create_histogram(
-                data=self.h_values_full[feature][self.state.plane_idx],
+                data=self.h_values_full[feature],
                 bins=self.h_bin_edges[feature],
             )
 
             cursor_hist = gui_factory.create_histogram(
-                data=self.h_values_cursor[feature][self.state.plane_idx],
+                data=self.h_values_cursor[feature],
                 bins=self.h_bin_edges[feature],
                 color="r",
             )
@@ -511,35 +498,16 @@ class SelectionGUI:
         self.labels.data = self.mask_labels
 
         # Update histograms for cells in the cursor
-        features_by_plane = {
-            key: utils.split_planes(value, self.roi_processor.zpix)
-            for key, value in self.manager.features.items()
-        }
-        idx_cursor_by_plane = utils.split_planes(
-            self.idx_cursor, self.roi_processor.zpix
-        )
-
         for feature in self.manager.features:
-            for iplane in range(self.roi_processor.lz):
-                c_feature_values = features_by_plane[feature][iplane][
-                    idx_cursor_by_plane[iplane]
-                ]
-                self.h_values_cursor[feature][iplane] = np.histogram(
-                    c_feature_values, bins=self.h_bin_edges[feature]
-                )[0]
+            self.h_values_cursor[feature] = np.histogram(
+                self.manager.features[feature][self.idx_cursor],
+                bins=self.h_bin_edges[feature],
+            )[0]
 
         # Update histogram visualizations
-        self.update_feature_plots()
-
-    def update_feature_plots(self) -> None:
-        """Update the histogram plots for all features."""
         for feature in self.manager.features:
-            self.hist_graphs[feature].setOpts(
-                height=self.h_values_full[feature][self.state.plane_idx]
-            )
-            self.hist_cursor[feature].setOpts(
-                height=self.h_values_cursor[feature][self.state.plane_idx]
-            )
+            self.hist_graphs[feature].setOpts(height=self.h_values_full[feature])
+            self.hist_cursor[feature].setOpts(height=self.h_values_cursor[feature])
 
     def update_label_colors(self) -> None:
         """Update the colors of the label visualization."""
@@ -968,8 +936,3 @@ class SelectionGUI:
     def _update_reference_visibility(self, event: Event) -> None:
         """Toggle visibility of the reference image."""
         self.reference.visible = not self.reference.visible
-
-    def _update_plane_idx(self, event: Event) -> None:
-        """Update plane index and coordinate feature histograms with viewer."""
-        self.state.plane_idx = event.source.current_step[0]
-        self.update_feature_plots()
