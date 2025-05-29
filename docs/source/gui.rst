@@ -47,9 +47,9 @@ cutoff isn't used, then the saved value will be ``None``.
 
 Feature histograms
 ~~~~~~~~~~~~~~~~~~
-These show the distribution of feature values for all the ROIs in the current plane for 
-each feature. The name of the feature is above the histogram. The full distribution is 
-shown in gray, and the currently selected ROIs is shown in red. 
+These show the distribution of feature values for all the ROIs for each feature. The name
+of the feature is above the histogram. The full distribution is shown in gray, and the
+currently selected ROIs is shown in red. 
 
 Buttons
 ~~~~~~~
