@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.0.0] - Upcoming
+
+> ⚠️ **BREAKING CHANGES WARNING** ⚠️
+>
+> This version introduces significant changes that will affect existing cellector 
+> installations. Key changes include:
+> - The ``RoiProcessor`` class now uses ``zpix`` instead of ``plane_idx`` to store the
+>   plane index for each ROI.
+> - Use of more accurate singular terms for ``reference`` and ``functional_reference``
+>   instead of the same terms with (s) at the end. 
+> - Extensive changes to properties of ``RoiProcessor`` for compatibility with 3D processing
+>   (it's still good for 2D, but some properties are refactored). 
+
+## Added
+- Support for 3D volumetric processing throughout the codebase. 
+- A new ``construct_from_suite3d`` constructor method which builds a ``RoiProcessor`` from a suite3d results directory.
+
+## Changed
+- To better support 3D processing, the selection GUI now handles multiplane data without splitting
+across planes. This means that the feature histograms will show all the data rather than just the 
+data for the current plane. If you want to be able to see the data for each plane separately, please
+raise an issue on Github to enable this functionality. 
+
+## Removed 
+- ``roi_processor.mask_volume`` has been removed since it isn't used anywhere. 
+
 ## [1.1.0] - 2025-04-30
 
 ### Added
