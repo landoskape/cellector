@@ -26,13 +26,6 @@ jobs:
           pip install .[test]
       - name: Run tests
         run: python -m pytest
-      - name: Upload coverage
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./coverage.xml
-          flags: unittests
-          fail_ci_if_error: true
 
   test-all-pythons:
     runs-on: ubuntu-latest
