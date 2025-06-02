@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Tuple, Optional, Protocol, TypedDict
+from typing import Tuple, Optional, Protocol, TypedDict, Set
 import numpy as np
 import pyqtgraph as pg
 from PyQt5.QtWidgets import QGraphicsProxyWidget, QPushButton
@@ -125,4 +125,4 @@ class Layer(Protocol):
 
 class Event(TypedDict):
     position: Tuple[int, int, int]
-    modifiers: set[str]
+    modifiers: Set[str]

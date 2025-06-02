@@ -68,7 +68,7 @@ class RoiProcessor:
     ----------
     root_dir : Path
         Path to the root directory where the data is stored.
-    zpix : np.ndarray | List[np.ndarray]
+    zpix : Union[np.ndarray, List[np.ndarray]]
         Numpy array containing the plane index for each ROI.
         Or, if volumetric=True, a list of numpy arrays containing the z-pixel indices for each ROI.
     ypix : List[np.ndarray]
@@ -79,7 +79,7 @@ class RoiProcessor:
         List of numpy arrays containing the pixen intensities for each ROI.
     reference : np.ndarray
         3D numpy array containing reference images for each plane.
-    functional_reference : np.ndarray | None
+    functional_reference : Union[np.ndarray, None]
         3D numpy array containing functional reference images for each plane (optional).
     lx, ly, lz : int
         Dimensions of the imaging volume.
@@ -133,9 +133,9 @@ class RoiProcessor:
             3D numpy array containing reference images for each plane. The first dimension should
             be the number of planes (lz), and the second and third dimensions should be the height
             and width of the reference images (notated as ly and lx).
-        functional_reference : np.ndarray | None, optional
+        functional_reference : Union[np.ndarray, None], optional
             3D numpy array containing functional reference images for each plane (optional).
-        extra_features : Dict[str, np.ndarray], optional
+        extra_features : Optional[Dict[str, List[np.ndarray]]], optional
             Dictionary containing extra features to be added to each plane. Each key is the
             name of the feature and the value is a list of 1d numpy arrays with length equal
             to the number of ROIs in each plane. Default is None.
