@@ -170,7 +170,7 @@ def flatten_roi_data(
     ----------
     lam : list of np.ndarrays
         Intensity values for each pixel in each ROI.
-    zpix : list of np.ndarrays | np.ndarray
+    zpix : list of Union[np.ndarrays, np.ndarray]
         Z-coordinates for each ROI. If 2D data, this should be a single np.ndarray of the z-plane.
         If volumetric data, this should be a list of np.ndarrays, one for each ROI.
     ypix : list of np.ndarrays
@@ -203,7 +203,7 @@ def flatten_roi_data(
 
 def get_roi_centroid(
     lam: np.ndarray,
-    zpix: np.ndarray | int,
+    zpix: Union[np.ndarray, int],
     ypix: np.ndarray,
     xpix: np.ndarray,
     method: str = "weightedmean",
@@ -215,7 +215,7 @@ def get_roi_centroid(
     ----------
     lam : np.ndarray
         Intensity values for each pixel in the ROI.
-    zpix : np.ndarray | int
+    zpix : Union[np.ndarray, int]
         Z-coordinates of pixels in the ROI for volumetric data, or just
         the z-plane for 2D data.
     ypix : np.ndarray
@@ -261,7 +261,7 @@ def get_roi_centroid(
 
 def get_roi_centroids(
     lam: List[np.ndarray],
-    zpix: np.ndarray | List[np.ndarray],
+    zpix: Union[np.ndarray, List[np.ndarray]],
     ypix: List[np.ndarray],
     xpix: List[np.ndarray],
     method: str = "weightedmean",
@@ -273,7 +273,7 @@ def get_roi_centroids(
     ----------
     lam : list of np.ndarrays
         Intensity values for each pixel in each ROI.
-    zpix : np.ndarray | list of np.ndarrays
+    zpix : Union[np.ndarray, List[np.ndarray]]
         Z-coordinates of each ROI -- if volumetric data this is a list of np.ndarrays
         for each ROI, if not volumetric this is a single np.ndarray of the z-plane for
         each ROI.
@@ -308,7 +308,7 @@ def get_roi_centroids(
 
 
 def get_mask_volume(
-    flattened_roi_data: dict[str, np.ndarray],
+    flattened_roi_data: Dict[str, np.ndarray],
     num_rois: int,
     shape: Tuple[int, int],
     volumetric: bool = False,
@@ -322,7 +322,7 @@ def get_mask_volume(
 
     Parameters
     ----------
-    flattened_roi_data : dict[str, np.ndarray]
+    flattened_roi_data : Dict[str, np.ndarray]
         lam_flat : np.ndarray
             Intensity values for each pixel in each ROI.
             In format (num_pixels,) with values from each ROI concatenated with each other.
@@ -387,8 +387,8 @@ def _nb_get_mask_volume(
 
 
 def get_centered_masks(
-    flattened_roi_data: dict[str, np.ndarray],
-    centroids: dict[str, np.ndarray],
+    flattened_roi_data: Dict[str, np.ndarray],
+    centroids: Dict[str, np.ndarray],
     width: Optional[int] = 15,
     fill_value: Optional[float] = 0.0,
     num_planes: Optional[int] = None,
@@ -404,7 +404,7 @@ def get_centered_masks(
 
     Parameters
     ----------
-    flattened_roi_data : dict[str, np.ndarray]
+    flattened_roi_data : Dict[str, np.ndarray]
         lam : np.ndarray
             Intensity values for each pixel in each ROI.
             In format (num_pixels,) with values from each ROI concatenated with each other.
@@ -419,7 +419,7 @@ def get_centered_masks(
             Same format as lam.
         roi_idx : np.ndarray
             ROI index for each value in lam, ypix, xpix, zpix
-    centroids : dict[str, np.ndarray]
+    centroids : Dict[str, np.ndarray]
         Dictionary of z, y, and x centroids for each ROI.
     width : int, optional
         Width in pixels around the ROI centroid. Default is 15.
@@ -589,7 +589,7 @@ def _get_roi_bounds(
 
 def get_centered_reference(
     reference: np.ndarray,
-    centroids: dict[str, np.ndarray],
+    centroids: Dict[str, np.ndarray],
     width: Optional[int] = 15,
     fill_value: Optional[float] = 0.0,
     volumetric: bool = False,
@@ -600,7 +600,7 @@ def get_centered_reference(
     ----------
     reference : np.ndarray
         Reference images for each plane (stack of 2D images).
-    centroids : dict[str, np.ndarray]
+    centroids : Dict[str, np.ndarray]
         Dictionary of z, y, and x centroids for each ROI.
     width : int, optional
         Width in pixels around the ROI centroid. Default is 15.
