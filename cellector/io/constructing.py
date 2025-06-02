@@ -60,7 +60,7 @@ def _get_s2p_data(
     s2p_folders: List[Path],
     reference_key: str = "meanImg_chan2",
     functional_key: str = "meanImg",
-) -> Tuple[list[list[dict]], list[np.ndarray], list[np.ndarray]]:
+) -> Tuple[List[List[dict]], List[np.ndarray], List[np.ndarray]]:
     """Get list of stats and chan2 reference images from all planes in a suite2p directory.
 
     suite2p saves the statistics and reference images for each plane in separate
@@ -109,7 +109,7 @@ def _get_s2p_data(
     return stats, references, functional_references
 
 
-def _get_s2p_redcell(s2p_folders: List[Path]) -> list[np.ndarray]:
+def _get_s2p_redcell(s2p_folders: List[Path]) -> List[np.ndarray]:
     """Get red cell probability masks from all planes in a suite2p directory.
 
     Extracts the red cell probability masks from each plane in a suite2p directory
@@ -243,7 +243,7 @@ def _get_pixel_data_single(
     return lam, ypix, xpix
 
 
-def _get_pixel_data(mask_volume: np.ndarray, verbose: bool = True) -> list[dict]:
+def _get_pixel_data(mask_volume: np.ndarray, verbose: bool = True) -> List[dict]:
     """Get pixel data from a mask volume.
 
     Extracts the intensity values, y-coordinates, and x-coordinates from a mask volume
@@ -411,91 +411,8 @@ def create_from_pixel_data(
 # ------------------------------------------------------------------------
 # Methods for creating RoiProcessor objects from suite3d results directory
 # ------------------------------------------------------------------------
-def _get_s2p_data(
-    s2p_folders: List[Path],
-    reference_key: str = "meanImg_chan2",
-    functional_key: str = "meanImg",
-) -> Tuple[list[list[dict]], list[np.ndarray], list[np.ndarray]]:
-    """Get list of stats and chan2 reference images from all planes in a suite2p directory.
-
-    suite2p saves the statistics and reference images for each plane in separate
-    directories. This function reads the statistics and reference images for each plane
-    and returns them as lists. The reference image is usually the average structural
-    fluorescence and the functional reference is usually the average green fluorescence.
-
-    Parameters
-    ----------
-    s2p_folders : list of Path
-        List of directories that contain the suite2p output for each plane (stat.npy and ops.npy).
-    reference_key : str, optional
-        Key to use for the reference image. Default is "meanImg_chan2".
-    functional_key : str, optional
-        Key to use for the functional image. Default is "meanImg".
-
-    Returns
-    -------
-    stats : list of list of dictionaries
-        Each element of stats is a list of dictionaries containing ROI statistics for each plane.
-    references : list of np.ndarrays
-        Each element of references is an image (usually of average red fluorescence) for each plane.
-    functional_references : list of np.ndarrays
-        Each element of functional_references is an image (usually of average green fluorescence) for each plane.
-    """
-    stats = []
-    references = []
-    functional_references = []
-    for folder in s2p_folders:
-        stats.append(np.load(folder / "stat.npy", allow_pickle=True))
-        ops = np.load(folder / "ops.npy", allow_pickle=True).item()
-        if reference_key not in ops:
-            raise ValueError(
-                f"Reference key ({reference_key}) not found in ops.npy file ({folder / 'ops.npy'})!"
-            )
-        if functional_key not in ops:
-            raise ValueError(
-                f"Functional key ({functional_key}) not found in ops.npy file ({folder / 'ops.npy'})!"
-            )
-        references.append(ops[reference_key])
-        functional_references.append(ops[functional_key])
-    if not all(ref.shape == references[0].shape for ref in references):
-        raise ValueError("Reference images must have the same shape as each other!")
-    if not all(ref.ndim == 2 for ref in references):
-        raise ValueError("Reference images must be 2D arrays!")
-    return stats, references, functional_references
-
-
-def _get_s2p_redcell(s2p_folders: List[Path]) -> list[np.ndarray]:
-    """Get red cell probability masks from all planes in a suite2p directory.
-
-    Extracts the red cell probability masks from each plane in a suite2p directory
-    and returns them as a list of numpy arrays. The red cell probability masks are
-    saved in the "redcell.npy" file in each plane directory in which the first column
-    is a red cell assigment and the second column is the probability of each ROI being
-    a red cell.
-
-    Parameters
-    ----------
-    s2p_folders : list of Path
-        List of directories that contain the suite2p output for each plane (redcell.npy).
-
-    Returns
-    -------
-    redcell : list of np.ndarrays
-        List of red cell probabilities for each plane. Each array has length N corresponding
-        to the number of ROIs in that plane.
-    """
-    redcell = []
-    for folder in s2p_folders:
-        if not (folder / "redcell.npy").exists():
-            raise FileNotFoundError(f"Could not find redcell.npy file in {folder}!")
-        c_redcell = np.load(folder / "redcell.npy")
-        redcell.append(c_redcell[:, 1])
-    return redcell
-
-
 def create_from_suite3d(
     suite3d_dir: Union[Path, str],
-    use_redcell: bool = False,
     reference_key: str = "ref_img_3d_structural",
     functional_key: str = "ref_img_3d",
     extra_features: dict = {},
@@ -509,10 +426,6 @@ def create_from_suite3d(
     ----------
     suite3d_dir : Path or str
         Path to the suite3d results directory.
-    use_redcell : bool, optional
-        Whether to load redcell data from suite3d folder. Default is False.
-        Note: Redcell analysis is not yet implemented in suite3d, if it is implemented but this function
-        still defaults to False, please alert us by raising an issue on github.
     reference_key : str, optional
         Key to use for reference images in the suite3d folder. Default is "ref_img_3d_structural".
     functional_key : str, optional
@@ -539,10 +452,6 @@ def create_from_suite3d(
     stats = np.load(suite3d_dir / "stats.npy", allow_pickle=True)
     reference = np.load(suite3d_dir / f"{reference_key}.npy")
     functional_reference = np.load(suite3d_dir / f"{functional_key}.npy")
-
-    if use_redcell:
-        # Need to implement this once it is implemented in suite3d
-        pass
 
     # Build appropriate format for RoiProcessor
     zpix = [s["coords"][0] for s in stats]
