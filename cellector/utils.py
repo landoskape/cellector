@@ -304,7 +304,7 @@ def get_roi_centroids(
         for (l, z, y, x) in zip(lam, zpix, ypix, xpix)
     ]
     zc, yc, xc = transpose(centroids)
-    return zc, yc, xc
+    return np.array(zc), np.array(yc), np.array(xc)
 
 
 def get_mask_volume(
@@ -565,11 +565,11 @@ def _get_roi_bounds(
     >>> slice = slice(start_offset, 2 * 5 + 1 + end_offset)
     >>> array[slice] = patch[start:end]
     """
-    if width < 0 or not isinstance(width, int):
+    if width < 0 or not isinstance(width, (int, np.integer)):
         raise ValueError("Width must be a non-negative integer")
-    if not isinstance(center, int):
+    if not isinstance(center, (int, np.integer)):
         raise ValueError("Center must be an integer")
-    if not isinstance(image_dim, int):
+    if not isinstance(image_dim, (int, np.integer)):
         raise ValueError("Image dimension must be an integer")
 
     # Get raw start and end indices (might be negative or larger than image_dim)
@@ -755,7 +755,7 @@ def cross_power_spectrum(
     eps: float = 1e6,
     volumetric: bool = False,
 ) -> np.ndarray:
-    """Measure the cross-power spectrum between two images.
+    r"""Measure the cross-power spectrum between two images.
 
     Computes the cross-power spectrum in the fourier domain with the following formula:
 
@@ -808,7 +808,7 @@ def phase_correlation(
     moving_image: np.ndarray,
     eps: float = 1e-8,
 ) -> np.ndarray:
-    """Measure the phase correlation between two images.
+    r"""Measure the phase correlation between two images.
 
     Computes the phase correlation in the fourier domain with the following formula:
 
@@ -850,7 +850,7 @@ def phase_correlation_zero(
     eps: float = 1e6,
     volumetric: bool = False,
 ) -> np.ndarray:
-    """Measure the zero-offset phase correlation between two images.
+    r"""Measure the zero-offset phase correlation between two images.
 
     Computes the phase correlation in the fourier domain with the following formula:
 
