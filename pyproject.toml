@@ -24,6 +24,12 @@ dependencies = [
     "napari[all]",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-cov",
+]
+
 [tool.hatch.version]
 path = "cellector/__init__.py"
 
