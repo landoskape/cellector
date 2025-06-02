@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional, Sequence, Callable, Union
+from typing import List, Tuple, Optional, Sequence, Callable, Union, Dict
 import warnings
 import functools
 import numpy as np
@@ -158,7 +158,7 @@ def flatten_roi_data(
     ypix: List[np.ndarray],
     xpix: List[np.ndarray],
     zpix: Optional[List[np.ndarray]] = None,
-) -> dict[str, np.ndarray]:
+) -> Dict[str, np.ndarray]:
     """Get flattened ROI data for use in parallel processing.
 
     Returns flattened arrays for intensity values, y-coordinates, x-coordinates in which
@@ -353,14 +353,7 @@ def get_mask_volume(
     """
     mask_stack = np.zeros((num_rois, *shape), dtype=np.float32)
     if volumetric:
-        return _nb_get_mask_volume_volumetric(
-            flattened_roi_data["lam_flat"],
-            flattened_roi_data["zpix_flat"],
-            flattened_roi_data["ypix_flat"],
-            flattened_roi_data["xpix_flat"],
-            flattened_roi_data["roi_idx"],
-            mask_stack,
-        )
+        raise NotImplementedError("Volumetric mask creation not implemented")
     else:
         return _nb_get_mask_volume(
             flattened_roi_data["lam_flat"],

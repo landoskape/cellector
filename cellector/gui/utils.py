@@ -124,5 +124,5 @@ class Layer(Protocol):
 
 
 class Event(TypedDict):
-    position: tuple[int, int, int]
+    position: Tuple[int, int, int]
     modifiers: set[str]
