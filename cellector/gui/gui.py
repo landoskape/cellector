@@ -180,7 +180,7 @@ class SelectionGUI:
             "enable_all": ("Enable All Features", self._enable_all_features),
         }
 
-        if self.roi_processor.functional_reference is not None:
+        if self.roi_processor.functional_reference is None:
             buttons.pop("toggle_reference")
 
         self.buttons = {}
