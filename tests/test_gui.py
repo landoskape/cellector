@@ -6,6 +6,8 @@ from cellector.gui import SelectionGUI
 from cellector.gui.utils import SelectionState, SelectionConfig
 from cellector.roi_processor import RoiProcessor
 
+SKIP_GUI = os.environ.get("SKIP_GUI_TESTS", "1") == "1"
+
 
 @pytest.fixture(scope="session", autouse=True)
 def headless_qt_and_napari_env():
@@ -120,6 +122,7 @@ def selection_gui(sample_roi_processor, qapp):
             gui.viewer.close()
 
 
+@pytest.mark.skipif(SKIP_GUI, reason="Skipping GUI tests in CI/headless environments.")
 def test_gui_initialization(selection_gui):
     """Test that the GUI initializes correctly."""
     assert isinstance(selection_gui, SelectionGUI)
@@ -128,6 +131,7 @@ def test_gui_initialization(selection_gui):
     assert selection_gui.roi_processor.num_rois == 3
 
 
+@pytest.mark.skipif(SKIP_GUI, reason="Skipping GUI tests in CI/headless environments.")
 def test_gui_layers(selection_gui):
     """Test that all required layers are created."""
     # Check if viewer is properly initialized
@@ -143,6 +147,7 @@ def test_gui_layers(selection_gui):
     assert "mask_labels" in selection_gui.viewer.layers, "Mask labels layer not found"
 
 
+@pytest.mark.skipif(SKIP_GUI, reason="Skipping GUI tests in CI/headless environments.")
 def test_state_toggles(selection_gui):
     """Test the state toggle functions."""
     # Test cell view toggle
@@ -166,6 +171,7 @@ def test_state_toggles(selection_gui):
     assert selection_gui.state.show_functional_reference != initial_state
 
 
+@pytest.mark.skipif(SKIP_GUI, reason="Skipping GUI tests in CI/headless environments.")
 def test_mask_image_property(selection_gui):
     """Test the mask_image property."""
     mask_image = selection_gui.mask_image
@@ -173,6 +179,7 @@ def test_mask_image_property(selection_gui):
     assert mask_image.shape == (2, 10, 10)  # (planes, height, width)
 
 
+@pytest.mark.skipif(SKIP_GUI, reason="Skipping GUI tests in CI/headless environments.")
 def test_mask_labels_property(selection_gui):
     """Test the mask_labels property."""
     mask_labels = selection_gui.mask_labels
@@ -181,6 +188,7 @@ def test_mask_labels_property(selection_gui):
     assert np.max(mask_labels) <= 3  # Should have at most 3 unique labels (one per ROI)
 
 
+@pytest.mark.skipif(SKIP_GUI, reason="Skipping GUI tests in CI/headless environments.")
 def test_feature_window_components(selection_gui):
     """Test that all feature window components are created."""
     assert hasattr(selection_gui, "feature_window")
@@ -190,6 +198,7 @@ def test_feature_window_components(selection_gui):
     assert hasattr(selection_gui, "buttons")
 
 
+@pytest.mark.skipif(SKIP_GUI, reason="Skipping GUI tests in CI/headless environments.")
 def test_button_creation(selection_gui):
     """Test that all required buttons are created."""
     required_buttons = {
@@ -206,6 +215,7 @@ def test_button_creation(selection_gui):
     assert set(selection_gui.buttons.keys()) == required_buttons
 
 
+@pytest.mark.skipif(SKIP_GUI, reason="Skipping GUI tests in CI/headless environments.")
 def test_histogram_creation(selection_gui):
     """Test that histograms are created for features."""
     # Check that histograms are created for each feature
